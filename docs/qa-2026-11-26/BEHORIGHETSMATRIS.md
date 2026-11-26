@@ -81,10 +81,14 @@ Testplan och paketordning: `SAKERHETSPROVNING-TESTPLAN.md`.
 | `personal_data_view` | Läsa personnummer och motsvarande uppgifter. Följer **inte** av `ao_view_all` eller `sales_manage`. | D-13 | PROJ + RLS + fältvis sammanslagning vid skrivning | admin*, ekonomi (ROT/RUT). Arbetsledare: se K-02. |
 | `time_view_all` | Läsa alla tidposter (arbetad och registrerad tid) utan attest och utan lönefält. Ersätter behovet av `payroll_*` för arbetsledare. | D-08 (utredning nedan) | EF `time-entries-list` (urval + projektion) | admin*, chef |
 | `bankgiro_edit` | Ändra bankgiro och betalningsuppgifter i `vift_settings` | D-17 | `store-key-write` + RPC (fältvis sammanslagning av settings) | admin* |
+| `staff_contacts_view` | Läsa kollegors arbetstelefon och arbets-e-post (interna kollegor, R38). Ersätter T3-D:s härledning av "intern" ur andra behörigheter. | BESLUT-2026-11-28 (T3-D 2, T3-E 4) | PROJ `vift_store_project` (`vift_staff`) | admin*, chef, ekonomi, personal (inte `begransad`) |
+| `activity_log_view_all` | Läsa hela aktivitetsloggen. Följer inte av `ao_view_all`; utan den bara händelser för AO där man är tilldelad. | BESLUT-2026-11-28 (T3-D 6) | PROJ + RLS (`vift_store_full_access`, `vift_store_project`) | admin*, chef, ekonomi |
 
 \* admin har `all`.
 
 **Nuläge 2026-11-28 (T3-E, lokalt verifierad):** `ao_start_own`, `ao_complete_own` och `ao_pool_take` verkställs (T3-B). Övriga tio nya behörigheter (`ao_plan_own`, `cost_view`, `cost_edit`, `time_view_all`, `bankgiro_edit`, `personal_data_view`, `objects_access_assigned`, `rondering_utfor`, `export_data`, `export_personal_data`) finns i katalogen och i standardrollerna men är **verkningslösa** tills respektive paket (AO-etappen, T4-A–T4-F) har sin serverkontroll: de står i serverns register `_vift_ej_verkstallda()` (vift-v2 `20261128000008`) och räknas inte i någon regel; en roll som får dem får exakt samma åtkomst som utan dem (bevisat i `vift-v2/tests/t3e_standard_roles.test.js` och e2e T3E-06). Rolleditorn märker dem "verkställs i <paket>". Ett T4-paket som verkställer en behörighet tar bort den ur registret i sin migration.
+
+**Nuläge efter T4-A (2026-11-28, lokalt verifierad, ej installerad i STAGING):** `cost_view`, `cost_edit` (skyddade fält; materialradernas okända pris och prisflödet är T4-B), `personal_data_view` och `bankgiro_edit` är verkställda och borttagna ur `_vift_ej_verkstallda()` (vift-v2 `20261128000009`); varje behörighet ger exakt den beslutade åtkomsten och inget mer (`t4a_skyddade_falt`, T3-E-testets SEC-CUST-01/08/20). Kvar som ej verkställda: `ao_plan_own`, `time_view_all`, `objects_access_assigned`, `rondering_utfor`, `export_data`, `export_personal_data`. Nya uttryckliga behörigheter `staff_contacts_view` och `activity_log_view_all` (BESLUT-2026-11-28, T3-D 2/6, T3-E 4) är verkställda med en övergångsregel för roller som saknar båda (se R38/R44). En inaktiverad roll (`active: false`) ger inga behörigheter, och en anropare utan någon giltig behörighet får inga verksamhetsdata.
 
 **Superadmin (D-25):**
 - Superadmin = aktiv personal vars roll innehåller `all`.
@@ -149,11 +153,13 @@ Id: `admin`, `chef` (etikett "Arbetsledare"), `ekonomi`, `personal`, `begransad`
 | `personal_data_view` | ✔ | K-02 | ✔ | | |
 | `offer_manage`, `sales_manage`, `recurring_manage` | ✔ | ✔ | | | |
 | `invoice_view`, `invoice_create` | ✔ | ✔ | ✔ | | |
-| `reports_view` | ✔ | | ✔ | | |
+| `reports_view` | ✔ | ✔ (T3-E 5, 2026-11-28) | ✔ | | |
 | `cost_view`, `cost_edit` | ✔ | ✔ (kan tas bort) | ✔ | | |
 | `time_view_all` | ✔ | ✔ | (via `payroll_view`) | | |
 | `payroll_view`, `payroll_manage` | ✔ | | ✔ | | |
 | `staff_view` | ✔ | ✔ | | | |
+| `staff_contacts_view` (T4-A) | ✔ | ✔ | ✔ | ✔ | |
+| `activity_log_view_all` (T4-A) | ✔ | ✔ | ✔ | | |
 | `staff_manage`, `admin_manage`, `article_manage`, `bankgiro_edit` | ✔ | | | | |
 | `export_data` | ✔ | ✔ | ✔ | | |
 | `export_personal_data` | ✔ | | | | |
@@ -161,6 +167,8 @@ Id: `admin`, `chef` (etikett "Arbetsledare"), `ekonomi`, `personal`, `begransad`
 "(separat)" betyder att behörigheten **inte** ingår som standard men kan läggas till för en enskild person eller en egen roll (D-04).
 
 **Nuläge 2026-11-28 (T3-E, lokalt verifierad):** tabellen finns som installerbar definition `vift-v2/supabase/manual/t3e_standardroller/standardroller.json` (testet `VIFT-CRM/tests/rollnamn_guard.test.js` jämför den med tabellen ovan, bara ✔). Installationen är ett manuellt skript (A läsande plan, B installera, C rollback med expectedHash, D övergångsregeln) som bara lägger till saknade roller, aldrig skriver över eller tar bort roller och aldrig ändrar personalposter. Inget är installerat i STAGING. Klientens demoroller och den simulerade serverns seed är samma fem roller.
+
+**T4-A (2026-11-28):** `chef` har `reports_view` (matrisändring T3-E 5); `staff_contacts_view` för admin, chef, ekonomi och personal; `activity_log_view_all` för admin, chef och ekonomi. Definitionen (`standardroller.json`, version `t4a-2026-11-28`) och skripten A–D är omgenererade; rapporter följer den underliggande behörigheten (inga personnummer, portkoder, inköpspriser eller lönefält utan respektive behörighet).
 
 ---
 
@@ -192,7 +200,7 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R09 | Planera egen (AO-etappen) | S | S | – | S *(ao_plan_own)* | – | RPC | AP-E | Finns inte |
 | R10 | Fakturering: `status:'fakturerad'`, `invoiceId`, `invoicedAt` | via `invoice-write` | via `invoice-write` | via `invoice-write` | – | – | EF `invoice-write` (`invoice_create`) + RPC `invoice_set_status`. `ao-time-write`/`work_order_patch` avvisar fälten för **alla** roller. | D-07 | `ao_edit` kan sätta `fakturerad` i `patch_ao` (F21) · **Lokalt verifierad rättning (T3-B, 2026-11-28)**, ej installerad i STAGING |
 | R11 | Ändra AO (fält, personal, pris), arkivera, mjuk och permanent radering | S | S *(ao_edit)* | – | – | – | EF + RPC | D-23 | Som målet |
-| R12 | AO-ekonomi: fastpris, prisbelopp, TB | S | S *(cost_view)* | L | – (debiteringskategori utan belopp) | – | PROJ `work-orders-list` | D-06 | `fixedPrice` m.m. skickas till fält, klienten döljer |
+| R12 | AO-ekonomi: fastpris, prisbelopp, TB | S | S *(cost_view)* | L | – (debiteringskategori utan belopp) | – | PROJ `work-orders-list` | D-06 | `fixedPrice` m.m. skickas till fält, klienten döljer · **Lokalt verifierad (T4-A, 2026-11-28):** `work-orders-list` och AO i skrivsvaren (ao-time-write, work-order-log-write, work-order-checklist-resolve, invoice-write) utan `fixedPrice`/`amount` för roller utan `ao_edit`, `ao_view_all`, `invoice_*` eller `cost_view`; debiteringskategorin (`priceType`, `priceGroupId`) finns kvar. Ej installerad i STAGING. |
 
 ### 3.2 Material, priser och kostnader (D-01, D-06, D-09, D-10, D-11, D-19)
 
@@ -201,8 +209,8 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R13 | Ny materialrad (artikel + mängd, eller fritext + mängd, enhet, dokumentation) | S | S | – | S *(ao_material)* egen tilldelad redigerbar AO | – | Ny radvis RPC (`work_order_material_add`), servern sätter `id`, `addedBy`, `addedAt` och pris från artikel | D-10, D-19 | SÄK-6: hela listan ersätts, priser från klienten |
 | R14 | Ändra och ta bort **egen** materialrad | S | S | – | S egen rad på egen redigerbar AO | – | RPC `work_order_material_update/remove` under lås | D-19 | Hela listan |
 | R15 | Ändra och ta bort **annans** materialrad | S | S *(ao_edit)* | – | – | – | RPC | D-19 | Fält kan |
-| R16 | Inköpspris (`articles.buyPrice`, `materials[].buyPrice`): läsa | L | L *(cost_view)* | L | – | – | PROJ (store och `work-orders-list`), EXP | D-01 | Alla läser artiklar. Artikelväljaren visar "Ink:". |
-| R17 | Inköpspris: sätta och komplettera okänt | S | S *(cost_edit)* | S | – | – | RPC (materialrad), `store-key-write` (fältvis för artiklar) | D-01, D-10 | Klienten sätter `\|\| 0` |
+| R16 | Inköpspris (`articles.buyPrice`, `materials[].buyPrice`): läsa | L | L *(cost_view)* | L | – | – | PROJ (store och `work-orders-list`), EXP | D-01 | Alla läser artiklar. Artikelväljaren visar "Ink:". · **Lokalt verifierad (T4-A, 2026-11-28):** artiklarnas `buyPrice`/`markup` och materialradernas `buyPrice` bara med `cost_view`, även för skrivaren `article_manage`/`ao_edit`; REST-raden för artiklar döljs utan `cost_view`. Artikelväljaren i klienten visar inget inköpspris utan `cost_view`. Ej installerad i STAGING. |
+| R17 | Inköpspris: sätta och komplettera okänt | S | S *(cost_edit)* | S | – | – | RPC (materialrad), `store-key-write` (fältvis för artiklar) | D-01, D-10 | Klienten sätter `\|\| 0` · **Lokalt verifierad (T4-A, 2026-11-28):** (fältdelen) `buyPrice` i artiklar och befintliga materialrader kräver `cost_edit` (403 `field_protected`); saknat värde bevaras vid sparning; inköpspris i en ny materialrad utan `cost_edit` ignoreras (`ignoredFields`). Komplettering av okänt pris och serverpris: T4-B. Ej installerad i STAGING. |
 | R18 | Försäljningspris material: läsa | L | L | L | – (dolt konsekvent överallt) | – | PROJ (`articles.sellPrice`, `materials[].sellPrice`), KLIENT | D-09 | Skickas till fält, artikelväljaren visar |
 | R19 | Försäljningspris material: sätta | S | S | S | – (servern sätter från artikel; fritext = okänt) | – | RPC | D-09, D-10 | Klienten sätter |
 | R20 | Okänt pris → fakturaunderlag | – | Flagga och komplettera | Flagga och komplettera | – | – | RPC `invoice_*` / `_invoice_financial_check` stoppar eller flaggar. TB = ofullständig. | D-10 | Okänt = 0 kr |
@@ -210,7 +218,7 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R22 | Prisgrupp: välja | S | S | S | Namn utan belopp, bara tillåtna grupper | – | EF `ao-time-write` + RPC `time_entry_create` validerar grupp och sätter `hourRate` | D-11 | Fält ser belopp, klienten skickar `hourRate` (F16) |
 | R23 | Timpris (`priceGroups.hourRate`, `timeEntries.hourRate`): läsa | L | L | L | – | – | PROJ (store, `time-entries-list`), KLIENT (stämpla ut, Tid-sidan, AO-detalj) | D-11 | Fält ser |
 | R24 | Historiskt bekräftat pris | Oförändrat vid prisliständring | | | | | RPC (ögonblicksbild i tidpost och materialrad) | D-11 | Ögonblicksbild finns för tidposter |
-| R25 | Intern timkostnad `settings.internalHourlyCost` | S | L *(cost_view)* | L | – | – | PROJ | D-01 | `ao_view_all`/`ao_edit`/`offer_manage` får fullt värde |
+| R25 | Intern timkostnad `settings.internalHourlyCost` | S | L *(cost_view)* | L | – | – | PROJ | D-01 | `ao_view_all`/`ao_edit`/`offer_manage` får fullt värde · **Lokalt verifierad (T4-A, 2026-11-28):** `internalHourlyCost` bara med `cost_view` (även för `admin_manage`), ändring kräver `cost_edit`; bevaras vid sparning. Ej installerad i STAGING. |
 
 ### 3.3 Tid, fakturering, offerter, kunder (D-07, D-08, D-12, D-13, D-20)
 
@@ -226,20 +234,20 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R33 | Offerter: fullständiga (belopp, rader) | S | S *(offer_manage)* | Lp (utan token och interna fält) | – | – | RLS + PROJ | D-12 | Som målet |
 | R34 | Offerter: referens till tilldelad AO | L | L | L | Lp: bara id, titel, status för offert kopplad till egen AO | Lp samma | PROJ (urval per post) | D-12 | **Lokalt verifierad (T3-D):** bara offerter kopplade till AO som anroparen ser med innehåll (AO:ns `offerId` eller offertens `workOrderId`), fälten id, titel, status och workOrderId; REST tom lista. Ej installerad i STAGING. · *tidigare: Stubb för **alla** offerter (F9)* |
 | R35 | Offerttoken, godkännande, intern anteckning | S | S *(offer_manage)* | – | – | – | RLS + PROJ. Publik väg: `offer-token-validate`/`offer-respond`. | D-12 | Som målet |
-| R36 | Kunder, fastigheter, objekt, kontakter | S | S | L | Lp: bara de som hör till egna AO, och begränsat för öppen pool | Lp: bara egna AO | PROJ (urval per post med samma regel som `work-orders-list`) | D-13 | **Lokalt verifierad (T3-D):** fält och begränsad får bara poster som hör till AO de ser med innehåll (öppen pool ger inga; adressen finns i poolprojektionen); portkoder och nyckelinformation aldrig i projektionen för roller utan `objects_sensitive` (skrivaren `customer_manage` undantagen, SÄK-7/T4-A); REST tom lista. Ej installerad i STAGING. · *tidigare: Fält läser hela registret* |
-| R37 | Personnummer, org.nr för privatperson | S | (K-02) | L *(personal_data_view)* | – | – | PROJ + RLS. Skrivning: fältvis sammanslagning. EXP. | D-13 | `customer_manage`/`invoice_*`/`offer_manage`/`sales_manage`/`ao_view_all` |
+| R36 | Kunder, fastigheter, objekt, kontakter | S | S | L | Lp: bara de som hör till egna AO, och begränsat för öppen pool | Lp: bara egna AO | PROJ (urval per post med samma regel som `work-orders-list`) | D-13 | **Lokalt verifierad (T3-D):** fält och begränsad får bara poster som hör till AO de ser med innehåll (öppen pool ger inga; adressen finns i poolprojektionen); portkoder och nyckelinformation aldrig i projektionen för roller utan `objects_sensitive` (skrivaren `customer_manage` undantagen, SÄK-7/T4-A); REST tom lista. Ej installerad i STAGING. · *tidigare: Fält läser hela registret* · **T4-A (lokalt verifierad):** portkoder och nyckelinformation lämnas inte heller ut till skrivaren `customer_manage` utan `objects_sensitive` (SÄK-7 stängd lokalt); fältvis sammanslagning bevarar dem vid sparning och nekar en ändring (403 `field_protected`). REST-läsning av kunder, fastigheter, objekt och kontakter kräver läsrätt till alla skyddade fält. Ej installerad i STAGING. |
+| R37 | Personnummer, org.nr för privatperson | S | (K-02) | L *(personal_data_view)* | – | – | PROJ + RLS. Skrivning: fältvis sammanslagning. EXP. | D-13 | `customer_manage`/`invoice_*`/`offer_manage`/`sales_manage`/`ao_view_all` · **Lokalt verifierad (T4-A, 2026-11-28):** personnummer och privatpersoners org.nr bara med `personal_data_view` (även för `customer_manage` och C-5:s kundläsare); saknat värde bevaras, ändring nekas (403 `field_protected`), typbyte från privatperson med lagrat org.nr nekas. Export (EXP): T4-F. Ej installerad i STAGING. |
 
 ### 3.4 Personal, roller, logg, uppgifter (D-14, D-15, D-21, D-22, D-25)
 
 | # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | **Lokalt verifierad (T3-D):** andra än en själv: namn, titel och (för interna) arbetstelefon och arbets-e-post; externa (bara D-04:s tilläggsbehörigheter) bara namn och titel för personal på egna AO; timpris, personnummer, användarnamn m.m. lämnas inte ut. Ej installerad i STAGING. · *tidigare: Alla läser hela posten* |
+| R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | **Lokalt verifierad (T3-D):** andra än en själv: namn, titel och (för interna) arbetstelefon och arbets-e-post; externa (bara D-04:s tilläggsbehörigheter) bara namn och titel för personal på egna AO; timpris, personnummer, användarnamn m.m. lämnas inte ut. Ej installerad i STAGING. · *tidigare: Alla läser hela posten* · **Lokalt verifierad (T4-A, 2026-11-28):** arbetskontakt till kollegor kräver `staff_contacts_view` (standard: admin, chef, ekonomi, personal; inte begransad). Övergångsregel: en roll utan både `staff_contacts_view` och `activity_log_view_all` behåller T3-E:s härledning tills införandeplanen är genomförd. Ej installerad i STAGING. |
 | R39 | Egen personalpost (inkl. e-post för inloggning) | L | L | L | L | L | PROJ (egen post fullständig). KLIENT `Auth._resolveUser`. | D-14 | Som målet |
 | R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | **Lokalt verifierad (T3-C):** andras `permissions` bort för alla utom `staff_manage`/`admin_manage`; andras `role` bara med `staff_view`; REST döljer raden. Skyddade personaluppgifter: **lokalt verifierad (T3-D)** — timpris m.m. lämnas inte ut till den som inte hanterar registret; arbetstelefon bara till interna kollegor. · *tidigare: Alla läser* |
 | R41 | Rollregister: egen effektiv behörighet | L | L | L | L | L | PROJ `vift_roles` (egen roll) | D-21 | **Lokalt verifierad (T3-C):** egen roll via store-key-write. · *tidigare: Alla läser alla roller* |
 | R42 | Rollregister: andras roller | S | – | – | – | – | PROJ + RLS *(admin_manage)* | D-21 | **Lokalt verifierad (T3-C):** bara `admin_manage` (och `all`); `staff_manage` får de roller den får tilldela. · *tidigare: Alla läser* |
 | R43 | Personal: skriva `role`/`active`, och roller: skriva `permissions` | S (superadmin) | – | – | – | – | RPC under gemensamt lås: eskaleringsregeln och invarianten "≥1 aktiv `all`" | D-25 | **Lokalt verifierad (T3-C):** SÄK-8 åtgärdad lokalt (eskaleringsregel + invariant under gemensamt lås). Ej installerad i STAGING. · *tidigare: **SÄK-8 (P1):** `staff_manage` kan ge sig själv admin. Inget skydd för sista superadmin.* |
-| R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | **Lokalt verifierad (T3-D):** hela loggen med `ao_view_all` (eller `admin_manage`); övriga AO-händelser för AO de ser med innehåll (inte öppen pool, Q3), inga offert-, faktura-, kund- eller säljposter; REST tom lista; även i `invoice-write`-svaret. Ej installerad i STAGING. · *tidigare: Alla läser alla* |
+| R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | **Lokalt verifierad (T3-D):** hela loggen med `ao_view_all` (eller `admin_manage`); övriga AO-händelser för AO de ser med innehåll (inte öppen pool, Q3), inga offert-, faktura-, kund- eller säljposter; REST tom lista; även i `invoice-write`-svaret. Ej installerad i STAGING. · *tidigare: Alla läser alla* · **Lokalt verifierad (T4-A, 2026-11-28):** hela loggen kräver `activity_log_view_all` (standard: admin, chef, ekonomi); en ny roll med `ao_view_all` utan den får bara händelser för AO där den är tilldelad. Övergångsregel som R38 (äldre roller med `ao_view_all`/`admin_manage` behåller hela loggen). Ej installerad i STAGING. |
 | R45 | Aktivitetslogg: rapportera | `appendActivity` | inom behörighet | inom behörighet | Typer och referenser för egna AO | samma | EF `store-key-write` `appendActivity` (typlista per behörighet, referens kontrolleras), RPC `activity_log_append` | D-22 | **Lokalt verifierad (T3-D):** typ per behörighet (403 `type_not_allowed`) och referenser mot det anroparen ser (403 `ref_not_visible`) i RPC:n, AO-raden under lås; servern sätter aktör och tid. Ej installerad i STAGING. · *tidigare: Alla typer och referenser tillåtna (F11)* |
 | R46 | Uppgifter: egna och tilldelade | S | S | S | S | S | EF `activities-policy.ts` (skrivning), PROJ per post (läsning) | D-15, Ö7 | **Lokalt verifierad (T3-D):** läsning = egna, tilldelade och uppgifter på AO där man är tilldelad; skrivning som tidigare med orsak (`not_own`, `field_<fält>`). Ej installerad i STAGING. · *tidigare: Skrivning som målet, läsning av alla* |
 | R47 | Uppgifter: andras | S | S *(ao_edit + ao_view_all, eller admin_manage)* | – (`ao_view_all` räcker inte) | – | – | EF + PROJ + KLIENT med samma regel | D-15 | **Lokalt verifierad (T3-D):** SÄK-2 åtgärdad lokalt — andras uppgifter bara med `admin_manage` eller `ao_edit` + `ao_view_all` i läsning, skrivning och klient (F8). Ej installerad i STAGING. · *tidigare: **SÄK-2 (P1):** fält läser alla. Klient och server följer olika regler (F8).* |
@@ -248,15 +256,15 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 
 | # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R48 | Skyddade objektfält i register (`propertyObjects.doorCode/keyInformation/accessInformation`, `recurringOrders.accessCode`, `workOrders.accessCode`) | S | S *(objects_sensitive)* | – | – | – | PROJ (även för skrivare), RLS, **fältvis sammanslagning** i `store_business_key_*`/`work_order_patch` | D-05, B5 | **SÄK-7 (P1, läckage):** skrivare utan `objects_sensitive` får fältet |
+| R48 | Skyddade objektfält i register (`propertyObjects.doorCode/keyInformation/accessInformation`, `recurringOrders.accessCode`, `workOrders.accessCode`) | S | S *(objects_sensitive)* | – | – | – | PROJ (även för skrivare), RLS, **fältvis sammanslagning** i `store_business_key_*`/`work_order_patch` | D-05, B5 | **SÄK-7 (P1, läckage):** skrivare utan `objects_sensitive` får fältet · **Lokalt verifierad (T4-A, 2026-11-28):** SÄK-7 (läckaget) stängt lokalt: projektion även för skrivare i `vift_store_project`/`vift_store_full_access` och `work-orders-list` (C-5-undantaget för `ao_edit` borttaget); fältvis sammanslagning i `store_business_key_write`/`_merge_write` och `work_order_patch` under radlås (SEC-B5-01..05). Tilldelningsvägen: T4-C. Ej installerad i STAGING. |
 | R49 | `property_sensitive_access` (sanningskälla) | S | S *(objects_sensitive)* | – | L *(objects_access_assigned)*: egen tilldelad aktiv AO eller rondering, loggat | (separat) | EF `get-/set-sensitive-fields` + RPC `sensitive_fields_write` + `sensitive_access_audit` | D-05, D-16 | Bara `objects_sensitive`/`all`, ingen tilldelningsväg |
 | R50 | Dubbel lagring av portkod (blob och tabell) | Jämförelserapport, ingen migrering | | | | | Förberedelse: läsande jämförelse. **Ingen datamigrering nu.** | D-16 | Dubbel lagring |
 | R51 | Radering av objekt med känsliga fält | S | S | – | – | – | RPC: atomisk borttagning av tabellraden vid permanent radering. Revisionsrad utan värde. Arkivering och mjuk radering behåller den. | D-23 | Ej hanterat |
 | R52 | Ronderingspass tilldelade: se och utföra | S | S | – | S *(rondering_utfor)* egna | (separat) | EF `rondering-pass-write` (ny gren per pass under lås i `rondering_*`-RPC) + PROJ | Ö3, D-04 | EF:en kräver `ao_view_all` för allt (F19) |
 | R53 | Ronderingar: mallar, schema, skapa pass, avvikelser | S | S *(ao_view_all)* | L | – | – | `store-key-write` + `rondering-pass-write` | Ö3 | Som målet för skrivning |
-| R54 | Inställningar: bankgiro (läsa) | L | L | L | – | – | PROJ | D-17 | Som målet (via intern-listan) |
-| R55 | Inställningar: bankgiro (ändra) | S *(bankgiro_edit)* | – | – | – | – | RPC fältvis sammanslagning av settings | D-17 | `admin_manage` skriver hela nyckeln |
-| R56 | Inställningar: övrigt | S *(admin_manage)* | L | L | Lp | Lp | RPC fältvis sammanslagning (konfliktsäker) | D-17 | Hela nyckeln skrivs, sista vinner vid 409-omförsök |
+| R54 | Inställningar: bankgiro (läsa) | L | L | L | – | – | PROJ | D-17 | Som målet (via intern-listan) · **Lokalt verifierad (T4-A, 2026-11-28):** bankgiro för interna roller (och `bankgiro_edit`); roller utan giltiga behörigheter får inga inställningar. Ej installerad i STAGING. |
+| R55 | Inställningar: bankgiro (ändra) | S *(bankgiro_edit)* | – | – | – | – | RPC fältvis sammanslagning av settings | D-17 | `admin_manage` skriver hela nyckeln · **Lokalt verifierad (T4-A, 2026-11-28):** ändring kräver `bankgiro_edit` (403 `field_protected` i både `write` och `writeMerge`); utan den bevaras bankgiro. Ej installerad i STAGING. |
+| R56 | Inställningar: övrigt | S *(admin_manage)* | L | L | Lp | Lp | RPC fältvis sammanslagning (konfliktsäker) | D-17 | Hela nyckeln skrivs, sista vinner vid 409-omförsök · **Lokalt verifierad (T4-A, 2026-11-28):** `writeMerge` för `vift_settings` fält för fält under radlås (D-17): olika fält från samtidiga sessioner tappas aldrig (SEC-INST-05 ×20), samma fält ger konflikt. Klienten (T4) sparar fält för fält; v3.4 skriver hela värdet med hash, skyddade fält bevaras då ändå. Ej installerad i STAGING. |
 
 ### 3.6 Export, cache, direkta vägar (D-18)
 
@@ -316,7 +324,7 @@ Ett generiskt fel (500, `write_failed`, nätverksfel, `forbidden` utan `reason` 
 | 403 | `forbidden` / `privilege_escalation` | Tilldela eller skapa roll med behörighet utöver anroparens, eller ändra egen roll |
 | 403 | `forbidden` / `superadmin_required` | Lägga till eller ta bort `all` utan `all` |
 | 409 | `last_superadmin` | Ändring som ger 0 aktiva med `all` |
-| 403 | `forbidden` / `not_own` | Uppgift som varken är egen eller tilldelad (D-15) |
+| 403 | `forbidden` / `not_own` | Uppgift som varken är egen eller tilldelad (D-15). T4-A: även bildradering av en bild som annans loggpost eller en checklistpunkt refererar (utan `ao_edit`). |
 | 403 | `forbidden` / `type_not_allowed`, `ref_not_visible` | `appendActivity` (D-22) |
 | 403 | `forbidden` / `export_not_allowed`, `personal_data_not_allowed` | Serverexport (D-18) |
 | 403 | `forbidden` / `price_group_not_allowed` | Prisgrupp som fältet inte får välja (D-11) |
@@ -433,21 +441,21 @@ Testdata, alla [E2E-TEST]:
 | SEC-B1-06 | − | FÄ | Gammal väg: `patch_ao {materials:[…]}` (hel lista) | E | L,SG | 403 `forbidden` (hel lista nekas för fältet, D-19) |
 | SEC-B1-07 | − | FÄ + AL | Samtidigt: FÄ lägger till, AL tar bort annan rad | P | L | Båda ändringarna finns kvar. Ingen rad försvinner tyst. |
 | SEC-B1-08 | − | FÄ | Rad på fakturerad, arkiverad eller borttagen AO | E,P | L | 409 `ao_locked` |
-| SEC-B1-09 | − | FÄ, BE | `articles[].buyPrice`, `articles[].sellPrice` | R,E,S | L,SG | REST: ingen rad. EF: fälten saknas. |
+| SEC-B1-09 | − | FÄ, BE | `articles[].buyPrice`, `articles[].sellPrice` | R,E,S | L,SG | REST: ingen rad. EF: fälten saknas. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-ART-01/T4-REST-art; K e2e T4A-04).** Försäljningspriset för fält: T4-B. |
 | SEC-B1-10 | − | FÄ | Artikelväljare och materialrad | K | W | Inga belopp (inköp och försäljning) |
-| SEC-B1-11 | + | AL, EK | `buyPrice`, TB | E | L,SG | Finns |
-| SEC-B1-12 | − | Egen roll "chef utan `cost_view`" | Samma | E,K,X | L,W | Saknas i alla vägar, även export av `materialRow` |
-| SEC-B1-13 | + | EK | Komplettera okänt inköpspris | E,P | L,SG | 200. Flaggan tas bort. Logg. |
-| SEC-B1-14 | − | FÄ; egen roll "chef utan `cost_edit`" | Samma | E,P | L | 403 `field_protected` |
+| SEC-B1-11 | + | AL, EK | `buyPrice`, TB | E | L,SG | Finns **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
+| SEC-B1-12 | − | Egen roll "chef utan `cost_view`" | Samma | E,K,X | L,W | Saknas i alla vägar, även export av `materialRow` **Lokalt grön (T4-A, `t4a_skyddade_falt` E; T3-E-testet SEC-CUST-01 exakt).** Export: T4-F. |
+| SEC-B1-13 | + | EK | Komplettera okänt inköpspris | E,P | L,SG | 200. Flaggan tas bort. Logg. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, för artikeln).** Materialradens okända pris: T4-B. |
+| SEC-B1-14 | − | FÄ; egen roll "chef utan `cost_edit`" | Samma | E,P | L | 403 `field_protected` **Lokalt grön (T4-A, `t4a_skyddade_falt` E, artikel och materialrad; SEC-CUST-02).** |
 | SEC-B1-15 | + | EK | Fakturaunderlag med okänt försäljningspris | P | L | Stoppat eller flaggat (`_invoice_financial_check`). Ingen summa 0. |
 | SEC-B1-16 | + | EK | Fastpris-AO med fältmaterial | P | L | Materialet debiteras inte separat om det inte uttryckligen är markerat som tillägg |
-| SEC-B1-17 | − | FÄ | `writeMerge vift_articles` (testartikel) | E | L,SG | 403 `forbidden` |
+| SEC-B1-17 | − | FÄ | `writeMerge vift_articles` (testartikel) | E | L,SG | 403 `forbidden` **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
 | SEC-B2-01 | − | FÄ | `priceGroups[].hourRate`, `timeEntries[].hourRate` | R,E,S | L,SG | Saknas. Gruppnamn finns. |
 | SEC-B2-02 | − | FÄ | Stämpla ut, Tid-sidan, AO-detaljens tidrader | K | W | Inga belopp |
 | SEC-B2-03 | − | FÄ | `create_time` med `hourRate:9999` | E,P | L,SG | 200 `ignoredFields:['hourRate']`. Lagrat = prisgruppens timpris. |
 | SEC-B2-04 | − | FÄ | `create_time` med en prisgrupp som inte är tillåten för fält | E,P | L | 403 `price_group_not_allowed` |
 | SEC-B2-05 | + | ADM | Ändra prisgruppens timpris efter registrerad tid | E | L | Befintliga tidposters `hourRate` oförändrat |
-| SEC-B2-06 | − | FÄ, BE, egen roll "chef utan `cost_view`" | `settings.internalHourlyCost` | R,E | L,SG | Saknas |
+| SEC-B2-06 | − | FÄ, BE, egen roll "chef utan `cost_view`" | `settings.internalHourlyCost` | R,E | L,SG | Saknas **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-INST-03).** |
 
 ### 5.5 Tid, fakturering (R26–R32)
 
@@ -483,10 +491,10 @@ Testdata, alla [E2E-TEST]:
 | SEC-OFF-06 | − | oinloggad | `offer-respond` med ogiltig eller utgången token | E | L | 4xx enligt EF. Offert-KS oförändrad. |
 | SEC-KUND-01 | − | FÄ | `customers`, `properties`, `propertyObjects`, `propertyContacts` | E,S | L,SG | Bara poster kopplade till egna AO, och begränsat för öppen pool **Lokalt grön (T3-D, `t3d_informationsatkomst` E för fält, FÄ2, begränsad och egna roller; S paritet KUND-*).** |
 | SEC-KUND-02 | − | FÄ, BE | REST `vift_customers` | R | L,SG | Tom lista **Lokalt grön (T3-D, `t3d_informationsatkomst` R för fält, begränsad och tom roll; S paritet REST-*).** |
-| SEC-KUND-03 | − | Egen roll med `ao_view_all` + `sales_manage` utan `personal_data_view` | `customers[].personnr`, `orgNr` för privatperson | R,E,X | L,SG | Saknas i alla vägar (D-13) |
-| SEC-KUND-04 | + | EK | Samma | E | L,SG | Finns |
-| SEC-KUND-05 | − | AL utan `personal_data_view` | Spara testkund utan `personnr` | E,P | L | Lagrat `personnr` oförändrat (fältvis sammanslagning) |
-| SEC-KUND-06 | − | AL utan `personal_data_view` | Spara testkund med `personnr:'X'` | E,P | L | 403 `field_protected` |
+| SEC-KUND-03 | − | Egen roll med `ao_view_all` + `sales_manage` utan `personal_data_view` | `customers[].personnr`, `orgNr` för privatperson | R,E,X | L,SG | Saknas i alla vägar (D-13) **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; T3-E-testet SEC-CUST-20 exakt; S paritet T4-KUND-LAS).** Export (X): T4-F. |
+| SEC-KUND-04 | + | EK | Samma | E | L,SG | Finns **Lokalt grön (T4-A, `t4a_skyddade_falt` E; K e2e T4A-02).** |
+| SEC-KUND-05 | − | AL utan `personal_data_view` | Spara testkund utan `personnr` | E,P | L | Lagrat `personnr` oförändrat (fältvis sammanslagning) **Lokalt grön (T4-A, `t4a_skyddade_falt` E, P; S paritet T4-KUND-01; K e2e T4A-02).** |
+| SEC-KUND-06 | − | AL utan `personal_data_view` | Spara testkund med `personnr:'X'` | E,P | L | 403 `field_protected` **Lokalt grön (T4-A, `t4a_skyddade_falt` E; S paritet T4-KUND-02).** |
 
 ### 5.7 Personal och roller (R38–R43, D-21, D-25)
 
@@ -535,11 +543,11 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-B5-01 | − | Egen roll "chef utan `objects_sensitive`" | `propertyObjects`, `recurringOrders`, `workOrders` → skyddade fält | R,E,S,X | L,SG | Saknas i alla vägar, även som skrivare. **SÄK-7.** |
-| SEC-B5-02 | + | Samma | Spara testobjekt utan skyddade fält | E,P | L,SG | 200. Skyddade fält oförändrade. |
-| SEC-B5-03 | − | Samma | Spara med `doorCode:''` / `'1234'` | E,P | L,SG | 403 `field_protected`. Objekt-KS oförändrad. |
-| SEC-B5-04 | − | ADM + AL samtidigt | ADM ändrar portkod, AL ändrar namn | P | L | Båda ändringarna kvar |
-| SEC-B5-05 | − | AL med inaktuell läsning | Sparar namn efter ADM:s portkodsändring | P | L | Portkoden är ADM:s nya värde |
+| SEC-B5-01 | − | Egen roll "chef utan `objects_sensitive`" | `propertyObjects`, `recurringOrders`, `workOrders` → skyddade fält | R,E,S,X | L,SG | Saknas i alla vägar, även som skrivare. **SÄK-7.** **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-OBJ-LAS/T4-WOL-01; K e2e T4A-01).** Export (X): T4-F. |
+| SEC-B5-02 | + | Samma | Spara testobjekt utan skyddade fält | E,P | L,SG | 200. Skyddade fält oförändrade. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, P; S paritet T4-OBJ-01; K e2e T4A-01).** |
+| SEC-B5-03 | − | Samma | Spara med `doorCode:''` / `'1234'` | E,P | L,SG | 403 `field_protected`. Objekt-KS oförändrad. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, P, även tomt värde, samma värde (inget orakel) och ny post; S paritet T4-OBJ-02; K e2e T4A-01).** |
+| SEC-B5-04 | − | ADM + AL samtidigt | ADM ändrar portkod, AL ändrar namn | P | L | Båda ändringarna kvar **Lokalt grön (T4-A, `t4a_skyddade_falt` ×20 parallella anrop med barriär: ingen bekräftad ändring förlorad, portkoden aldrig raderad; ADM:s inaktuella element nekas som konflikt utan mutation).** |
+| SEC-B5-05 | − | AL med inaktuell läsning | Sparar namn efter ADM:s portkodsändring | P | L | Portkoden är ADM:s nya värde **Lokalt grön (T4-A, `t4a_skyddade_falt` P under radlås).** |
 | SEC-B5-06 | + | FÄ | `get-sensitive-fields` för objekt på egen tilldelad aktiv AO | E | L,SG | 200, en revisionsrad `allowed` utan värden |
 | SEC-B5-07 | + | FÄ | Samma för tilldelad rondering | E | L | 200 + revisionsrad |
 | SEC-B5-08 | − | FÄ | Objekt på annans AO, öppen pool, klar AO | E | L,SG | 403 `not_assigned`. Exakt en revisionsrad `denied`, inget annat ändrat. |
@@ -563,13 +571,13 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Förväntat |
 |---|---|---|---|---|
-| SEC-INST-01 | − | FÄ, BE | Läsa `bankgiro`, `internalHourlyCost` | Saknas |
-| SEC-INST-02 | + | AL, EK | Läsa `bankgiro` | Finns |
-| SEC-INST-03 | − | Egen roll med `admin_manage` utan `bankgiro_edit` | Ändra `bankgiro` | 403 `field_protected`. Settings-KS oförändrad. |
-| SEC-INST-04 | − | Samma | Spara annan inställning med projicerat värde utan `bankgiro` | 200. `bankgiro` oförändrat. |
-| SEC-INST-05 | − | ADM + ADM2 samtidigt | Olika fält | Båda finns kvar |
-| SEC-INST-06 | − | AL, EK, FÄ | `write vift_settings` | 403 `forbidden` |
-| SEC-INST-07 | − | ADM | `write` utan eller med inaktuell hash | 409 `missing_expected_hash` / `stale_write` |
+| SEC-INST-01 | − | FÄ, BE | Läsa `bankgiro`, `internalHourlyCost` | Saknas **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
+| SEC-INST-02 | + | AL, EK | Läsa `bankgiro` | Finns **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
+| SEC-INST-03 | − | Egen roll med `admin_manage` utan `bankgiro_edit` | Ändra `bankgiro` | 403 `field_protected`. Settings-KS oförändrad. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, write och writeMerge; S paritet T4-INST-01; K e2e T4A-03).** |
+| SEC-INST-04 | − | Samma | Spara annan inställning med projicerat värde utan `bankgiro` | 200. `bankgiro` oförändrat. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, write och writeMerge; S paritet T4-INST-02; K e2e T4A-03).** |
+| SEC-INST-05 | − | ADM + ADM2 samtidigt | Olika fält | Båda finns kvar **Lokalt grön (T4-A, `t4a_skyddade_falt` ×20 parallella anrop; samma fält ×20: exakt en vinner; K e2e T4A-03).** |
+| SEC-INST-06 | − | AL, EK, FÄ | `write vift_settings` | 403 `forbidden` **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
+| SEC-INST-07 | − | ADM | `write` utan eller med inaktuell hash | 409 `missing_expected_hash` / `stale_write` **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
 
 ### 5.12 Export, cache, direkta vägar, simulerad server (R57–R63)
 
@@ -598,14 +606,14 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 
 | ID | Egen roll | Prövas | Förväntat |
 |---|---|---|---|
-| SEC-CUST-01 | `chef` − `cost_view` | Inköpspris och TB i EF, UI och export | Saknas (SEC-B1-12) **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A/B.** |
-| SEC-CUST-02 | `chef` − `cost_edit` | Komplettera inköpspris | 403 `field_protected` **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A/B.** |
-| SEC-CUST-03 | `chef` − `objects_sensitive` | Portkod i register, AO, export och som skrivare | Saknas (SEC-B5-01..03) **T3-E: lokalt grön för get-sensitive-fields (403 + denied-rad) och läsprojektionen; skrivaren (`customer_manage`) får fortfarande portkoden i registret — T4-A (SÄK-7).** |
+| SEC-CUST-01 | `chef` − `cost_view` | Inköpspris och TB i EF, UI och export | Saknas (SEC-B1-12) ~~T3-E: verkningslös nu~~ **Lokalt grön (T4-A): exakt de beslutade skillnaderna (artiklar, inställningar, materialradernas inköpspris, REST).** Export: T4-F. |
+| SEC-CUST-02 | `chef` − `cost_edit` | Komplettera inköpspris | 403 `field_protected` **Lokalt grön (T4-A) för artikel och materialrad (`t4a_skyddade_falt`); materialradens okända pris och prisflödet: T4-B.** |
+| SEC-CUST-03 | `chef` − `objects_sensitive` | Portkod i register, AO, export och som skrivare | Saknas (SEC-B5-01..03) **T3-E: lokalt grön för get-sensitive-fields (403 + denied-rad) och läsprojektionen; skrivaren (`customer_manage`) får fortfarande portkoden i registret — T4-A (SÄK-7).** **T4-A: lokalt grön även som skrivare (projektion + fältvis sammanslagning); export T4-F.** |
 | SEC-CUST-04 | `chef` − `invoice_create` | `invoice-write` | 403 `forbidden` **Lokalt grön (T3-E, standardroll − behörighet).** |
 | SEC-CUST-05 | `chef` − `time_view_all` | `time-entries-list` | Bara egna **T3-E: verkningslös nu (chef ser bara egna med och utan `time_view_all`), verkställs i T4-B (K-01).** |
 | SEC-CUST-06 | `chef` − `export_data` | All export | SEC-EXP-01 **T3-E: verkningslös nu på servern (ingen serverexport); klientexporten följer inte `export_data` förrän T4-F.** |
 | SEC-CUST-07 | `ekonomi` − `payroll_manage` | `attest_time` | 403 `forbidden` **Lokalt grön (T3-E).** |
-| SEC-CUST-08 | `ekonomi` − `personal_data_view` | Personnummer | Saknas **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A.** |
+| SEC-CUST-08 | `ekonomi` − `personal_data_view` | Personnummer | Saknas **Lokalt grön (T4-A): bara kundregistrets personnummer skiljer.** |
 | SEC-CUST-09 | `personal` − `ao_pool_take` | Poolprojektion, tagning | Ingen pool. 403 `forbidden`. **Lokalt grön (T3-B, T3-E).** |
 | SEC-CUST-10 | `personal` − `ao_complete_own` | Klarmarkera egen | 403 `forbidden` **Lokalt grön (T3-B, T3-E).** |
 | SEC-CUST-11 | `personal` − `ao_start_own` | Starta egen | 403 `forbidden` **Lokalt grön (T3-B, T3-E).** |
@@ -617,10 +625,10 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 | SEC-CUST-17 | `begransad` + `objects_access_assigned` | Åtkomstinformation för egen AO | 200 + `allowed`-rad **T3-E: verkningslös nu (ingen åtkomstinformation, inga kollegors kontaktuppgifter), verkställs i T4-C.** |
 | SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 **Lokalt grön (T3-C).** **T3-E: grön även med standardrollerna.** |
 | SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 **Lokalt grön (T3-C)** för `all` och `bankgiro_edit` som tillägg i en roll; SEC-INST-03 är T4. **T3-E: grön även med standardrollerna.** |
-| SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) **T3-E: verkningslös nu; personnumret lämnas i dag ut till kundregistrets läsare (C-5) — T4-A.** |
+| SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) **T3-E: verkningslös nu; personnumret lämnas i dag ut till kundregistrets läsare (C-5) — T4-A.** **Lokalt grön (T4-A).** |
 | SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) **Lokalt grön (T3-D: ekonomi och egen roll säljare, E och S).** **T3-E: grön även med standardrollerna.** |
-| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. **T3-E: grön även med standardrollerna.** |
-| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. **T3-E: grön även med standardrollerna.** |
+| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. **T3-E: grön även med standardrollerna.** **T4-A: inga inställningar, prisgrupper, återkommande ärenden eller artiklar längre (punkt 7 stängd lokalt).** |
+| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. **T3-E: grön även med standardrollerna.** **T4-A: som SEC-CUST-22; dessutom inaktiverad roll = inga behörigheter (server och klient).** |
 
 ---
 
@@ -630,23 +638,23 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 
 | Beslut | Status | Genomslag i matrisen |
 |---|---|---|
-| D-01 | **Fastställt** | `cost_view`/`cost_edit` standard för admin, chef och ekonomi, och kan tas bort. Ger inte löneuppgifter. R16, R17, R25. |
+| D-01 | **Fastställt** · lokalt verifierad (T4-A): `cost_view`/`cost_edit` verkställda för skyddade fält; prisflödet T4-B | `cost_view`/`cost_edit` standard för admin, chef och ekonomi, och kan tas bort. Ger inte löneuppgifter. R16, R17, R25. |
 | D-02 | **Fastställt** · lokalt verifierad (T3-E) | Id `admin`/`chef`/`ekonomi`/`personal`/`begransad`, ingen migrering av personal. §2. |
 | D-03 | **Fastställt** | `ao_start_own`/`ao_complete_own`/`ao_pool_take`. Låsta statusar. Servern sätter identitet och tid. R07, R08, R04. |
 | D-04 | **Fastställt** | Begränsad: egna AO. Tilläggsbehörigheter separat. §2, SEC-CUST-16/17. |
-| D-05 | **Fastställt** | `objects_sensitive` standard för chef, kan tas bort. `objects_access_assigned` för fält, även vid rondering. R48, R49. |
-| D-06 | **Fastställt** | Ingen AO-ekonomi till fält. Debiteringskategori utan belopp. R12. |
+| D-05 | **Fastställt** · delvis lokalt verifierad (T4-A): skrivare utan `objects_sensitive` får inga portkoder; tilldelningsvägen T4-C | `objects_sensitive` standard för chef, kan tas bort. `objects_access_assigned` för fält, även vid rondering. R48, R49. |
+| D-06 | **Fastställt** · lokalt verifierad (T4-A): AO-ekonomi projiceras bort för fält i `work-orders-list` och skrivsvaren | Ingen AO-ekonomi till fält. Debiteringskategori utan belopp. R12. |
 | D-07 | **Fastställt** | Chef får `invoice_*`. Fakturering bara via `invoice-write`. Faktureringsfält avvisas i `patch_ao` för alla. R10, R30. |
 | D-08 | **Fastställt** (utredning §1.1) | `time_view_all` för chef. `payroll_*` för ekonomi och admin. R27–R29. |
 | D-09 | **Fastställt** | Inga försäljningspriser för fält i någon vy. R18, R19. |
 | D-10 | **Fastställt** | Fritext. Okänt ≠ 0. Faktureringsstopp. Fastpris utan dubbeldebitering. R13, R20, R21. |
 | D-11 | **Fastställt** | Gruppnamn utan belopp. Servern validerar och sätter priset. Historik oförändrad. R22–R24. |
 | D-12 | **Fastställt** | Minimal offertreferens för tilldelad AO. R34. |
-| D-13 | **Fastställt** | Urval per uppdrag, begränsad poolprojektion, `personal_data_view`. R36, R37, R03. |
+| D-13 | **Fastställt** · lokalt verifierad (T3-D + T4-A): `personal_data_view` verkställd; export T4-F | Urval per uppdrag, begränsad poolprojektion, `personal_data_view`. R36, R37, R03. |
 | D-14 | **Fastställt** | Arbetskontakt för interna kollegor. Egen post fullständig. R38–R40. |
 | D-15 | **Fastställt** | `ao_view_all` räcker inte. Samma regel i klient och server. R47. |
 | D-16 | **Fastställt** | Tabellen är sanningskälla. Bara förberedelse, ingen migrering. R50. |
-| D-17 | **Fastställt** | Läsning för interna roller. Ändring kräver `bankgiro_edit`. Fältvis sammanslagning. R54–R56. |
+| D-17 | **Fastställt** · lokalt verifierad (T4-A): `bankgiro_edit`, fältvis sammanslagning av inställningar | Läsning för interna roller. Ändring kräver `bankgiro_edit`. Fältvis sammanslagning. R54–R56. |
 | D-18 | **Fastställt** | `export_data`, `export_personal_data`. Serverexport för skyddade fält. R57–R60. |
 | D-19 | **Fastställt** | Radvisa RPC:er. Egna rader. Hela listan nekas för fält. R13–R15. |
 | D-20 | **Fastställt** | `internalNote`/`customerNote`. Gammalt `note` skrivs inte ut. Ingen dataändring. R31, R32. |
