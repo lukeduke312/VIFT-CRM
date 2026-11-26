@@ -85,3 +85,7 @@ REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.
 #    serveromgång som T4-B (T4-A + T4-B samordnat; rollback i omvänd ordning: T4-B först).
 # Installeras i STAGING först efter separat GO, med STOP-kontroll (se docs T4-RESULTAT.md, T4-A).
 20261128000009  migrations/20261128000009_t4a_skyddade_falt.sql
+# ── T4-A, tilläggsdel notiser (2026-11-28): NY – EJ INSTALLERAD I STAGING (klass "ny" i MIG-1). Installeras
+#    DIREKT efter 20261128000009 i samma serveromgång (T4-A + T4-B); rollback FÖRE T4-A:s (supabase/rollback/T4-A-notiser/).
+#    Säker notisväg (appendNotification/markNotificationsRead), projektion per mottagare, REST-vitlistan avvecklad (punkt 275).
+20261128000010  migrations/20261128000010_t4a_notiser.sql

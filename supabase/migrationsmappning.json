@@ -22,7 +22,7 @@
   "objektLikaAB": 41,
   "repoFilerPerKlass": {
    "installerad": 37,
-   "ny": 9,
+   "ny": 10,
    "rekonstruerad": 5,
    "kandidat": 3,
    "stagingOnly": 2,
@@ -1858,6 +1858,14 @@
   {
    "fil": "migrations/20261128000009_t4a_skyddade_falt.sql",
    "md5": "e23628debf3cc554f128f7ae7ce19231",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000010_t4a_notiser.sql",
+   "md5": "2e51275323477a38c662637616b9e2c9",
    "stagingVersioner": [],
    "klass": "ny – ej installerad i STAGING",
    "klassKod": "ny",

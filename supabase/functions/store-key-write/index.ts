@@ -58,12 +58,25 @@
  *   `klient` ({behorighetskatalog: 4} från T4-klienten) skickas vidare till RPC:n: utan den kan en
  *   rollskrivning inte ta bort behörigheter som v3.4-rolleditorn inte känner till.
  *
+ * T4-A, tilläggsdel notiser (2026-11-28, punkt 275, beslutets punkt 7): notiser skrivs BARA här.
+ *   appendNotification → RPC notification_append: servern sätter avsändare, tid och id; mottagaren
+ *   måste vara aktiv personal; referensen (aoId) prövas för avsändaren (_vift_ref_visible); typ per
+ *   behörighet ('ao_assigned' kräver ao_edit och att mottagaren är tilldelad AO:n, egna påminnelser
+ *   bara till sig själv); idempotens bunden till innehållet (requestId). markNotificationsRead →
+ *   RPC notifications_mark_read: bara egna notiser. Läsningen projiceras per mottagare
+ *   (vift_store_project); direkt REST-läsning och -skrivning av vift_notifications är stängd.
+ *   Fel: 403 {error:'forbidden', reason: type_not_allowed|ref_not_visible|recipient_not_allowed|
+ *   recipient_not_assigned}, 403 {error:'forbidden'}, 400 {error:'invalid_entry'},
+ *   409 {error:'idempotency_key_conflict'}.
+ *
  * POST /functions/v1/store-key-write
  * body: { action: 'write', key, value, expectedHash, klient? } |
  *       { action: 'writeMerge', key, upserts, removals, klient? } |
  *       { action: 'readWithHash', key } |
  *       { action: 'readHashes', keys } |
- *       { action: 'readAllWithHashes', keys }
+ *       { action: 'readAllWithHashes', keys } |
+ *       { action: 'appendNotification', requestId, notification: { userId, type, aoId?, message? } } |
+ *       { action: 'markNotificationsRead', ids } | { action: 'markNotificationsRead', all: true }
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -182,6 +195,18 @@ function mapRpcError(error: { message?: string } | null): Response | null {
   return json({ error: 'write_failed' }, 500)
 }
 
+/* T4-A, tilläggsdel notiser: felkoder från notification_append/notifications_mark_read. */
+function mapNotisError(error: { message?: string } | null): Response {
+  const msg = String((error && error.message) || '')
+  const regel = /\bforbidden:([a-z_]+)/.exec(msg)
+  if (regel) return json({ error: 'forbidden', reason: regel[1] }, 403)
+  if (msg.includes('forbidden')) return json({ error: 'forbidden' }, 403)
+  if (msg.includes('invalid_entry')) return json({ error: 'invalid_entry' }, 400)
+  if (msg.includes('idempotency_key_conflict')) return json({ error: 'idempotency_key_conflict' }, 409)
+  console.error('[store-key-write] notis-RPC:', msg)
+  return json({ error: 'write_failed' }, 500)
+}
+
 /* T3-D: projicera ett skrivsvar med samma regel som läsningarna. Misslyckas projektionen
    lämnas `current` och konflikternas serverValue bort (klienten läser då om), aldrig oprojicerat. */
 // deno-lint-ignore no-explicit-any
@@ -286,6 +311,30 @@ serve(async (req: Request) => {
       return json({ error: 'append_failed' }, 500)
     }
     return json(data || { ok: true, id: built.entry.id })
+  }
+
+  /* T4-A, tilläggsdel notiser: alla kontroller görs i RPC:n under radlås (anroparen omläst där). */
+  if (action === 'appendNotification') {
+    const n = body.notification as Record<string, unknown> | undefined
+    const requestId = typeof body.requestId === 'string' ? body.requestId : ''
+    if (!n || typeof n !== 'object' || Array.isArray(n) || !requestId || requestId.length > 100) return json({ error: 'invalid_entry' }, 400)
+    const str = (v: unknown) => v === undefined || v === null || typeof v === 'string'
+    if (typeof n.userId !== 'string' || typeof n.type !== 'string' || !str(n.aoId) || !str(n.message)) return json({ error: 'invalid_entry' }, 400)
+    // Bara de fält klienten får påverka; avsändare, tid, id, läsläge och offerId sätts av servern.
+    const entry: Record<string, unknown> = { userId: n.userId, type: n.type, aoId: n.aoId ?? '', message: n.message ?? '' }
+    const { data, error } = await supabase.rpc('notification_append', { p_caller_staff_id: callerStaffId, p_entry: entry, p_request_id: requestId })
+    if (error) return mapNotisError(error)
+    return json(data || {})
+  }
+  if (action === 'markNotificationsRead') {
+    const all = body.all === true
+    const ids = body.ids
+    if (!all && (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || ids.some((x) => typeof x !== 'string' || !x || x.length > 100))) {
+      return json({ error: 'invalid_entry' }, 400)
+    }
+    const { data, error } = await supabase.rpc('notifications_mark_read', { p_caller_staff_id: callerStaffId, p_ids: all ? null : ids, p_all: all })
+    if (error) return mapNotisError(error)
+    return json(data || {})
   }
 
   if (action === 'write') {
