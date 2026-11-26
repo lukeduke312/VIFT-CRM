@@ -30,6 +30,19 @@ const T4C_MIG = 'migrations/20261128000012_t4c_atkomstinformation.sql';
 const EF = ['get-sensitive-fields', 'set-sensitive-fields', 'store-key-write', 'work-orders-list', 'time-entries-list', 'ao-time-write',
   'work-order-checklist-resolve', 'work-order-log-write', 'invoice-write'];
 const T0 = '2026-11-01T08:00:00.000Z';
+/* T4-D (2026-11-28): denna svit prövar T4-C-paketet SÅ SOM DET LEVERERADES — kedjan utan T4-D och senare
+   (schemajämförelse med T4_LAGE=T4-C) och Edge Functions ur T4-C-commiten (3a23521). T4-D:s ändringar
+   (ronderingsgrenen aktiverad, rondering per pass) prövas i t4d_rondering.test.js. */
+const T4C_COMMIT = '3a23521';
+const T4REG = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't4-andringar.json'), 'utf8')).objekt;
+const SENARE = Object.keys(T4REG).filter((k) => /^T4-[D-Z]$/.test(T4REG[k].paket) && !(T4REG[k].md5_t4c));
+const obsBaraSenare = (ut) => { const m = /OBS: T4-ändringar som inte syns[^\n]*/.exec(ut); return !m || Object.keys(T4REG).filter((k) => !SENARE.includes(k)).every((k) => !m[0].includes(k)); };
+function t4cKalla() {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'vift-t4c-kod-'));
+  process.on('exit', () => { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) { /* ignore */ } });
+  execFileSync('tar', ['-x', '-C', d], { input: execFileSync('git', ['-C', path.join(__dirname, '..'), 'archive', T4C_COMMIT, 'supabase'], { maxBuffer: 512 * 1024 * 1024 }) });
+  return path.join(d, 'supabase');
+}
 const VARDEN = ['TEST-1001', 'TEST-2002', 'TEST-FAST-1', 'TEST-FAST-2', 'Nyckel i testskåp A', 'Nyckelbricka B', 'Ring på', 'LARM-TEST-9', 'KVITTO-TEST-7'];
 /* Testvärldens standardroll "personal" har objects_access_assigned och rondering_utfor (som
    standardroller.json); egna roller prövar SEC-B5-09/10. */
@@ -85,6 +98,8 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
   const rotFore = path.join(HIST, 'supabase');
   ok(!fs.existsSync(path.join(rotFore, T4C_MIG)) && fs.existsSync(path.join(rotFore, 'migrations', '20261128000011_t4b_material_priser_tid.sql')), 'jämförelsekoden (före) = T4-B ' + FORE_COMMIT + ' (utan T4-C-migrationen)');
 
+  process.env.T4_LAGE = 'T4-C';
+  const rotT4c = t4cKalla();
   const r = byggReplik({ utelamna: franOchMed(T4C_MIG).filter((x) => x !== T4C_MIG) });
   const { db, U } = r;
   ok(r.steg[r.steg.length - 1].rel === T4C_MIG, 'kedjan innehåller T4-C-migrationen 20261128000012 sist (efter T4-B)');
@@ -93,7 +108,7 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
   psql(db, `create table public._t4c_bas as select * from public.store; create table public._t4c_psa as select * from public.property_sensitive_access; create table public._t4c_idem as select * from public.op_idempotency;`);
   const aterstall = () => psql(db, `begin; delete from public.store; insert into public.store select * from public._t4c_bas; delete from public.property_sensitive_access; insert into public.property_sensitive_access select * from public._t4c_psa;
     delete from public.op_idempotency; insert into public.op_idempotency select * from public._t4c_idem; delete from public.stamp_status; commit;`);
-  const ef = await laddaEf(db, EF);
+  const ef = await laddaEf(db, EF, { root: rotT4c });
 
   const rf = byggReplik({ rot: rotFore, schemakontroll: false });
   const Uf = rf.U;
@@ -182,7 +197,7 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
       'SEC-B5-07 (grenen, prövad med rondering_utfor verkställd i en transaktion som rullas tillbaka): eget aktivt pass ger fastighetens åtkomstinformation; annans pass, objektnivå via pass och utan rondering_utfor nekas', g);
     const ejv = psql(db, `select md5(pg_get_functiondef('public._vift_ej_verkstallda()'::regprocedure))`);
     const reg = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't4-andringar.json'), 'utf8')).objekt['funktion:_vift_ej_verkstallda()'];
-    ok(reg && reg.md5.startsWith(ejv), '_vift_ej_verkstallda() oförändrad efter grenprovet (md5 = registret)', ejv);
+    ok(reg && (reg.md5_t4c || reg.md5).startsWith(ejv), '_vift_ej_verkstallda() oförändrad efter grenprovet (md5 = registrets T4-C-version)', ejv);
   }
 
   // ════════════════ SEC-B5-08: annans AO, öppen pool, klar AO m.fl. → 403 not_assigned, en denied-rad ════════════════
@@ -348,7 +363,9 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
     const ejv = psql(db, `select array_to_string(public._vift_ej_verkstallda(), ',')`).split(',').sort();
     const std = JSON.parse(fs.readFileSync(path.join(serverRot(), 'manual', 't3e_standardroller', 'standardroller.json'), 'utf8'));
     const fake = require('./e2e/t4c-regler.js').EJ_VERKSTALLDA.slice().sort();
-    ok(!ejv.includes('objects_access_assigned') && ejv.join() === Object.keys(std.ejVerkstallda).sort().join() && ejv.join() === fake.join() && std.version === 't4c-2026-11-28',
+    /* standardroller.json speglar det senaste paketet; i T4-C-läget är rondering_utfor ännu inte verkställd (T4-D). */
+    const senareV = ['rondering_utfor'].filter((x) => !Object.keys(std.ejVerkstallda).includes(x));
+    ok(!ejv.includes('objects_access_assigned') && ejv.join() === Object.keys(std.ejVerkstallda).concat(senareV).sort().join() && ejv.join() === fake.join() && /^t4[c-z]-2026-11-28$/.test(std.version),
       'objects_access_assigned verkställd: borttagen ur _vift_ej_verkstallda(), standardroller.json (t4c-2026-11-28) och fake-backendens lista (samma lista)', [ejv, Object.keys(std.ejVerkstallda), fake]);
     ok(psql(db, `select public._vift_staff_external(array['dashboard_view','ao_view_own','objects_access_assigned'])`) === 't' && psql(db, `select public._vift_t4a_kontakt(array['dashboard_view','ao_view_own','objects_access_assigned'])`) === 'f',
       'verkställandet ändrar inte extern/intern-indelningen (objects_access_assigned står i D-04:s fasta tilläggslista)');
@@ -418,7 +435,7 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
     s = await GSF(efGammal, U.chef, { objectId: 'OBJ-R1' });
     ok(s.status === 200 && s.body.doorCode === 'TEST-1001', 'installationsfönstret: objects_sensitive fungerar med den gamla EF:en', s.body);
     // Fel ordning: ny EF mot T4-B-databasen (RPC:n saknas) → 500 audit_unavailable, inga värden (fail closed).
-    const efNyPaGammal = await laddaEf(rf.db, ['get-sensitive-fields']);
+    const efNyPaGammal = await laddaEf(rf.db, ['get-sensitive-fields'], { root: rotT4c });
     s = await GSF(efNyPaGammal, Uf.chef, { objectId: 'OBJ-R1' });
     ok(s.status === 500 && s.body.error === 'audit_unavailable' && !JSON.stringify(s.body).includes('TEST-'), 'fel installationsordning (ny EF före databasen): 500 audit_unavailable utan värden (fail closed)', s.body);
     // v3.4-klientens radering av objekt (writeMerge) → D-23 i servern oberoende av klient.
@@ -431,7 +448,7 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
   {
     const rb = byggReplik({ utelamna: franOchMed(T4C_MIG).filter((x) => x !== T4C_MIG), schemakontroll: false });
     laddaVarld(rb.db, rb.U);
-    const efRb = await laddaEf(rb.db, ['get-sensitive-fields', 'store-key-write']);
+    const efRb = await laddaEf(rb.db, ['get-sensitive-fields', 'store-key-write'], { root: rotT4c });
     let s = await GSF(efRb, rb.U.falt, { objectId: 'OBJ-R1', workOrderId: 'AO-A1' });
     const x = await SK(efRb, rb.U.admin, { action: 'writeMerge', key: 'vift_propertyObjects', upserts: [], removals: [{ id: 'OBJ-R2', previous: el(rb.db, 'vift_propertyObjects', 'OBJ-R2') }] });
     ok(s.status === 200 && x.status === 200, 'T4-C-koden skapar data (uttag med revisionsrad, permanent radering med revisionsrad)');
@@ -450,7 +467,7 @@ const vardenIAudit = (db) => Number(psql(db, `select count(*) from public.sensit
     let fel = null;
     try { psqlFile(rb.db, path.join(serverRot(), T4C_MIG)); } catch (e) { fel = e.message; }
     ut = jamfor();
-    ok(!fel && ofo(ut) === 0 && !/OBS: T4-ändringar som inte syns/.test(ut), 'ny installation efter rollback: STOP-kontrollen godtar T4-B-versionerna; schemat = alla registrerade ändringar', fel || ut.split('\n').filter((l) => /OFÖRKLARAD|OBS/.test(l)).slice(0, 5));
+    ok(!fel && ofo(ut) === 0 && obsBaraSenare(ut), 'ny installation efter rollback: STOP-kontrollen godtar T4-B-versionerna; schemat = alla registrerade T4-A–T4-C-ändringar (senare T4-paket inte installerade)', fel || ut.split('\n').filter((l) => /OFÖRKLARAD|OBS/.test(l)).slice(0, 5));
     let stop = null;
     try { psqlFile(rb.db, path.join(serverRot(), T4C_MIG)); } catch (e) { stop = e.message; }
     ok(stop && /T4-C STOP: sensitive_fields_read finns redan/.test(stop), 'STOP-kontroll: en andra körning av 20261128000012 avbryts', stop);

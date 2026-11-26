@@ -25,6 +25,7 @@ const vm = require('vm');
 const T4A = require('./t4a-regler');
 const T4B = require('./t4b-regler'); // T4-B (2026-11-28): material, priser och tid
 const T4C = require('./t4c-regler'); // T4-C (2026-11-28): åtkomstinformation (objects_access_assigned), D-23
+const T4D = require('./t4d-regler'); // T4-D (2026-11-28): rondering per pass (rondering_utfor)
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -207,7 +208,7 @@ const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'activ
 const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
 /* T3-E (20261128000008): ej verkställda behörigheter (= _vift_ej_verkstallda()) räknas inte när
    servern avgör intern/extern — de ger ingen åtkomst förrän T4. */
-const T3E_EJ_VERKSTALLDA = T4C.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda; T4-B: time_view_all; T4-C: objects_access_assigned
+const T3E_EJ_VERKSTALLDA = T4D.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda; T4-B: time_view_all; T4-C: objects_access_assigned; T4-D: rondering_utfor
 const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'].concat(T3E_EJ_VERKSTALLDA);
 const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
   'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
@@ -215,7 +216,9 @@ const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activiti
   /* T4-A: inställningar, artiklar och urval per post för återkommande, projekt, avvikelser, inspektioner. */
   'vift_settings', 'vift_articles', 'vift_recurringOrders', 'vift_projects', 'vift_avvikelser', 'vift_inspections',
   /* T4-B: prisgrupper (timpris bara med prisläsrätt, annars bara aktiva grupper utan belopp). */
-  'vift_priceGroups'];
+  'vift_priceGroups',
+  /* T4-D: pass, ronderingar och mallar (hela bara för ao_view_all, annars urval per pass). */
+  'vift_ronderingspass', 'vift_ronderingar', 'vift_ronderingsmallar'];
 const anyOf = (p, list) => list.some((x) => p.includes(x));
 const pick = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => keys.includes(k)));
 const omit = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k)));
@@ -232,6 +235,8 @@ function t3dFull(key, perms, keyPerms) {
   if (['vift_recurringOrders', 'vift_projects', 'vift_inspections', 'vift_avvikelser'].includes(key)) return T4A.kundLas(p);
   /* T4-B (D-09, D-11): artiklar och prisgrupper i sin helhet bara med prisläsrätt. */
   if (['vift_articles', 'vift_priceGroups'].includes(key) && !T4B.prisLas(p)) return false;
+  /* T4-D (SÄK-14, R52/R53): pass, ronderingar och mallar i sin helhet bara för ao_view_all. */
+  if (T4D.KEYS.includes(key)) return T4D.ledning(p);
   const wp = keyPerms[key]; if (wp && p.includes(wp)) return true;
   switch (key) {
     case 'vift_offers': case 'vift_offerEvents': case 'vift_offerAttachments': return p.includes('offer_manage');
@@ -369,6 +374,8 @@ class FakeSupabase {
       customers: uniq(aos.map((a) => a.customerId)), properties: uniq(aos.map((a) => a.propertyId)), objects: uniq(aos.map((a) => a.objectId)),
       offers: uniq(aos.map((a) => a.offerId).concat((this.get('offers') || []).filter((o) => o && o.id && aoIds.includes(String(o.workOrderId || ''))).map((o) => o.id))),
       staff: uniq(aos.flatMap((a) => aoStaffOf(a).concat([a.responsibleStaffId]))),
+      /* T4-D: ronderingar med eget tilldelat pass (verkställd rondering_utfor). */
+      ronderingar: T4D.aktiv(perms) ? T4D.egnaRonderingar(this.get('ronderingspass'), staffId) : [],
     };
   }
   /* T3-D: vift_store_project för nycklarna i T3D_KEYS (T3-C:s regel för roller oförändrad). */
@@ -392,6 +399,7 @@ class FakeSupabase {
     if (key === 'vift_settings') return value && typeof value === 'object' && !Array.isArray(value) ? T4A.proj(key, value, p) : value;
     if (!Array.isArray(value)) return value;
     const id = me && me.id ? String(me.id) : '';
+    if (T4D.KEYS.includes(key)) return T4D.projicera(key, value, p, id, this.get('ronderingspass')); // T4-D: urval per pass
     const obj = (e) => e && typeof e === 'object' && !Array.isArray(e);
     const refs = () => this.t3dRefs(p, id);
     if (key === 'vift_articles') return value.map((e) => T4B.artikel(T4A.proj(key, e, p), p)); // T4-B: försäljningspris bara med prisläsrätt
@@ -434,7 +442,10 @@ class FakeSupabase {
       /* T4-A (T3-D 6): utan activity_log_view_all bara AO där anroparen är tilldelad (eller ser med innehåll utan ao_view_all). */
       const p2 = p.includes('ao_view_all') ? p.filter((x) => x !== 'ao_view_all').concat(['ao_view_own']) : p;
       const r = this.t3dRefs(p2, id);
-      return value.filter((e) => obj(e) && T3D_AO_LOG.includes(e.type) && r.ao.includes(String(e.workOrderId || '')) && !e.offerId && !e.invoiceId && !e.salesOpportunityId);
+      /* T4-D (T3-D beslut 5): ronderingshändelser för ronderingar med eget pass. */
+      return value.filter((e) => obj(e) && ((T3D_AO_LOG.includes(e.type) && r.ao.includes(String(e.workOrderId || '')))
+        || (T4D.RON_HANDELSER.includes(e.type) && !e.workOrderId && r.ronderingar.includes(String(e.ronderingId || ''))))
+        && !e.offerId && !e.invoiceId && !e.salesOpportunityId);
     }
     if (key === 'vift_activities') {
       const r = (p.includes('ao_view_own') || p.includes('ao_view_all')) ? this.t3dRefs(['ao_view_own'], id) : { ao: [] };
@@ -519,7 +530,7 @@ class FakeSupabase {
       case 'invoiceId': return t3dFull('vift_invoices', p, kp);
       case 'salesOpportunityId': return t3dFull('vift_salesOpps', p, kp);
       case 'inspectionId': return t3dFull('vift_inspections', p, kp);
-      case 'ronderingId': return t3dFull('vift_ronderingar', p, kp);
+      case 'ronderingId': return t3dFull('vift_ronderingar', p, kp) || (r.ronderingar || []).includes(refId); // T4-D
       case 'deviationId': return t3dFull('vift_avvikelser', p, kp);
       default: return false;
     }
@@ -1363,7 +1374,10 @@ class FakeSupabase {
   }
 
   ronderingWrite(b, perms, me) {
-    if (!this.has(perms, 'ao_view_all')) return DEFINITE(403, 'forbidden');
+    /* T4-D: ao_view_all (alla pass, oförändrat) eller rondering_utfor (bara egna pass) — rondering-pass-write + RPC. */
+    const led = T4D.ledning(perms);
+    if (!led && !perms.includes('rondering_utfor')) return DEFINITE(403, 'forbidden');
+    if (!led && ['create', 'bulkCreate', 'migrateLegacy'].includes(b.action)) return DEFINITE(403, 'forbidden');
     const passes = this.get('ronderingspass') || [];
     const save = () => { this.set('ronderingspass', passes); this.touch(); };
     const fresh = (tpl) => {
@@ -1394,23 +1408,32 @@ class FakeSupabase {
       if (passes.some((x) => x.id === pass.id)) return { status: 200, body: { pass: passes.find((x) => x.id === pass.id) } };
       recompute(pass); passes.push(pass); save(); return { status: 200, body: { pass } };
     }
-    const pass = passes.find((x) => x.id === b.passId); if (!pass) return DEFINITE(404, 'not_found');
-    if ((pass.status === 'slutfört' || pass.status === 'har_avvikelser') && b.action !== 'saveNote') return DEFINITE(409, 'pass_completed');
+    if (!['pointPatch', 'pointReset', 'saveNote', 'autoStart', 'complete'].includes(b.action)) return DEFINITE(400, 'unknown_action');
+    if (!b.passId) return DEFINITE(400, 'missing_fields');
+    const pass = passes.find((x) => x.id === b.passId) || null;
+    /* T4-D: passregeln under låset (_vift_t4d_pass_regel): ledningen alla pass (även avslutade, som servern);
+       fältet bara egna, ej avslutade (autoStart är en no-op på avslutat pass). */
+    const regel = T4D.prova(pass, me && me.id, perms, b.action !== 'autoStart');
+    if (!regel.ok) return REGEL(regel.status, regel.error, regel.reason);
+    const ign = [];
     const point = () => { const c = (pass.categories || []).find((x) => x.id === b.categoryId); return c && (c.points || []).find((x) => x.id === b.pointId); };
     switch (b.action) {
       case 'pointPatch': {
         const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found');
-        Object.assign(pt, { status: b.status, comment: b.comment || '', deviationId: b.deviationId || pt.deviationId || null, workOrderId: b.workOrderId || pt.workOrderId || null, checkedAt: new Date().toISOString(), checkedBy: me.id });
+        if (!['ok', 'anmärkning', 'ej_aktuell', 'ej_kontrollerad'].includes(b.status)) return DEFINITE(400, 'invalid_status');
+        let dev = b.deviationId || null, wo = b.workOrderId || null;
+        if (!led) { if (dev) { ign.push('deviationId'); dev = null; } if (wo) { ign.push('workOrderId'); wo = null; } } // T4-D (R53)
+        Object.assign(pt, { status: b.status, comment: b.comment || '', deviationId: dev || pt.deviationId || null, workOrderId: wo || pt.workOrderId || null, checkedAt: new Date().toISOString(), checkedBy: me.id });
         if (!pass.status || pass.status === 'planerat') { pass.status = 'pågående'; pass.startedAt = new Date().toISOString(); }
         recompute(pass); break;
       }
       case 'pointReset': { const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found'); Object.assign(pt, { status: '', comment: '', deviationId: null, checkedAt: null, checkedBy: null }); recompute(pass); break; }
       case 'saveNote': pass.internalNote = b.note; break;
-      case 'autoStart': if (!pass.status || pass.status === 'planerat') { pass.status = 'pågående'; pass.startedAt = new Date().toISOString(); } break;
+      case 'autoStart': if (!pass.status || pass.status === 'planerat') { pass.status = 'pågående'; pass.startedAt = new Date().toISOString(); } else return { status: 200, body: { pass } }; break;
       case 'complete': recompute(pass); pass.status = pass.summary.anmärkningar > 0 ? 'har_avvikelser' : 'slutfört'; pass.completedAt = new Date().toISOString(); pass.completedBy = me.id; break;
       default: return DEFINITE(400, 'unknown_action');
     }
-    save(); return { status: 200, body: { pass } };
+    save(); return { status: 200, body: Object.assign({ pass }, ign.length ? { ignoredFields: ign } : {}) };
   }
 
   /* ── work-order-checklist-resolve ──────────────────────────

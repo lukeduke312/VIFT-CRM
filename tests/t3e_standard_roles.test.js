@@ -178,7 +178,8 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   s = await ef.anropa('get-sensitive-fields', { user: U.falt, body: { objectId: 'OBJ-R1' } });
   ok(s.status === 200 && s.body.doorCode && audit() === a0 + 1 && /^allowed\|ao:AO-/.test(psql(db, `select status || '|' || detail from public.sensitive_access_audit order by ts desc limit 1`)),
     'SEC-CUST-14 (+, T4-C): standardrollen personal får åtkomstinformationen för objektet på sin egen aktiva AO, en revisionsrad allowed', s.body);
-  await lika('SEC-CUST-15 (personal − rondering_utfor)', std('personal'), EGNA.c15, 'VERKNINGSLÖS NU: rondering_utfor verkställs i T4-D (rondering-pass-write kräver i dag ao_view_all för allt)');
+  /* T4-D (2026-11-28): rondering_utfor är verkställd; i denna värld finns inga pass eller ronderingar, så profilen är lika — den beslutade åtkomsten (egna pass) prövas exakt i t4d_rondering (SEC-ROND-01..05). */
+  await lika('SEC-CUST-15 (personal − rondering_utfor)', std('personal'), EGNA.c15, 'VERKSTÄLLD (T4-D): ger bara egna tilldelade pass (rondering-pass-write, projektion per pass); utan pass i världen identisk profil — inget annat skiljer');
   await JA('SEC-CUST-16 (begransad + ao_time, D-04): tid på egen AO → 200', () => AW(U.cust16, { action: 'create_time', entry: { id: 'TE-C16', aoId: 'AO-A1', date: '2026-11-24', minutes: 60 } }), ['store:vift_timeEntries', 'store:vift_workOrders', 'tabell:op_idempotency']);
   await NEJ('SEC-CUST-16: begransad + ao_time på öppen pool → 403 forbidden/not_assigned', () => AW(U.cust16, { action: 'create_time', entry: { id: 'TE-C16b', aoId: 'AO-P1', date: '2026-11-24', minutes: 60 } }), { status: 403, error: 'forbidden', reason: 'not_assigned' });
   /* T4-C: verkställd — en begränsad användare med objects_access_assigned men utan egen aktiv AO på objektet nekas nu

@@ -360,14 +360,59 @@ const T4C_SCEN = [
   { id: 'C-BE', sec: 'SEC-B5-09 (begränsad, egen AO)', anv: 'begransad', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1' }), utfall: gsfUt },
   { id: 'C-AL', sec: 'objects_sensitive (oförändrat)', anv: 'chef', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1' }), utfall: gsfUt },
   { id: 'C-FAST', sec: 'SEC-B5-06 (fastighetsnivå)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ propertyId: 'PROP-R1' }), utfall: gsfUt },
-  { id: 'C-PASS', sec: 'SEC-B5-07 (pass, före T4-D avstängt)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ propertyId: 'PROP-R1', passId: 'PASS-C1' }), utfall: gsfUt },
+  { id: 'C-PASS', sec: 'SEC-B5-07 (pass; avstängt i T4-C, aktiverat av T4-D)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ propertyId: 'PROP-R1', passId: 'PASS-C1' }), utfall: gsfUt },
   { id: 'C-INDATA', sec: 'missing_fields', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ workOrderId: 'AO-A1' }), utfall: gsfUt },
 ].map((sc) => Object.assign({ varld: t4cVarld, fakeOpts: T3D_OPTS }, sc));
 SCENARIER.push(...T4C_SCEN);
 
+/* ── T4-D (2026-11-28): rondering per pass (rondering-pass-write, projektion, ronderingshändelser) ── */
+const t4dKat = () => [{ id: 'K1', name: 'K1', points: [{ id: 'K1-P1', title: 'P1', status: '' }, { id: 'K1-P2', title: 'P2', status: '' }] }];
+const t4dVarld = (store, d) => {
+  t4cVarld(store, d);
+  const F = d.U.falt.staffId, F2 = d.U.falt2.staffId;
+  store.vift_ronderingar = [{ id: 'RON-C1', name: 'Rondering C1', propertyId: 'PROP-R1', customerId: 'CU-R1', internalNote: 'Intern', hourRate: 650, pricingType: 'tim', categories: t4dKat(), status: 'planerad' },
+    { id: 'RON-C2', name: 'Rondering C2', propertyId: 'PROP-R2', customerId: 'CU-R3', internalNote: 'Intern 2', fixedPrice: 9000, categories: [], status: 'planerad' }];
+  store.vift_ronderingsmallar = [{ id: 'MALL-C1', name: 'Mall', categories: t4dKat() }];
+  store.vift_ronderingspass = [
+    { id: 'PASS-C1', ronderingId: 'RON-C1', propertyId: 'PROP-R1', customerId: 'CU-R1', staffIds: [F], status: 'planerat', categories: t4dKat(), summary: {}, internalNote: '' },
+    { id: 'PASS-C2', ronderingId: 'RON-C2', propertyId: 'PROP-R2', customerId: 'CU-R3', staffIds: [F2], status: 'planerat', categories: t4dKat(), summary: {}, internalNote: '' },
+    { id: 'PASS-C3', ronderingId: 'RON-C1', propertyId: 'PROP-R1', customerId: 'CU-R1', staffIds: [F], status: 'slutfört', categories: t4dKat(), summary: {}, internalNote: '' }];
+  store.vift_activityLog = (store.vift_activityLog || []).concat([{ id: 'ACT-C1', type: 'rondering_started', ronderingId: 'RON-C1', description: 'x', timestamp: '2026-11-01T08:00:00.000Z' },
+    { id: 'ACT-C2', type: 'rondering_started', ronderingId: 'RON-C2', description: 'x', timestamp: '2026-11-01T08:00:00.000Z' }]);
+};
+const passUt = (las, id) => { const p = (las('vift_ronderingspass') || []).find((x) => x.id === id) || {}; const pt = ((p.categories || [])[0] || { points: [] }).points; return [p.status, pt.map((x) => x.status + ':' + (x.checkedBy || '') + ':' + (x.deviationId || '')).join(';'), p.completedBy || '', p.internalNote || ''].join('|'); };
+const RPP = (passId, extra) => Object.assign({ action: 'pointPatch', passId, categoryId: 'K1', pointId: 'K1-P1', status: 'ok', comment: '' }, extra || {});
+const T4D_SCEN = [
+  { id: 'R-PATCH-egen', sec: 'SEC-ROND-01 (eget pass)', anv: 'falt', ef: 'rondering-pass-write', body: RPP('PASS-C1', { deviationId: 'AVV-X' }), utfall: (las, svar) => passUt(las, 'PASS-C1') + '|' + JSON.stringify((svar.body || {}).ignoredFields || null) },
+  { id: 'R-NOTE-egen', sec: 'SEC-ROND-01 (anteckning)', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'saveNote', passId: 'PASS-C1', note: 'Fält' }, utfall: (las) => passUt(las, 'PASS-C1') },
+  { id: 'R-START-egen', sec: 'SEC-ROND-01 (autoStart)', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'autoStart', passId: 'PASS-C1' }, utfall: (las) => passUt(las, 'PASS-C1') },
+  { id: 'R-KLAR-egen', sec: 'SEC-ROND-01 (complete)', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'complete', passId: 'PASS-C1' }, utfall: (las) => passUt(las, 'PASS-C1') },
+  { id: 'R-PATCH-annans', sec: 'SEC-ROND-02', anv: 'falt', ef: 'rondering-pass-write', body: RPP('PASS-C2'), utfall: (las) => passUt(las, 'PASS-C2') },
+  { id: 'R-PATCH-okand', sec: 'SEC-ROND-02 (okänt pass)', anv: 'falt', ef: 'rondering-pass-write', body: RPP('PASS-FINNS-INTE'), utfall: () => '' },
+  { id: 'R-PATCH-klar', sec: 'pass_completed (fält)', anv: 'falt', ef: 'rondering-pass-write', body: RPP('PASS-C3'), utfall: (las) => passUt(las, 'PASS-C3') },
+  { id: 'R-START-klar', sec: 'autoStart på avslutat (no-op)', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'autoStart', passId: 'PASS-C3' }, utfall: (las) => passUt(las, 'PASS-C3') },
+  { id: 'R-CREATE-falt', sec: 'SEC-ROND-03', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'create', passTemplate: { ronderingId: 'RON-C1', categories: [] } }, utfall: (las) => (las('vift_ronderingspass') || []).length },
+  { id: 'R-BULK-falt', sec: 'SEC-ROND-03 (massskapande)', anv: 'falt', ef: 'rondering-pass-write', body: { action: 'bulkCreate', ronderingId: 'RON-C1', candidates: [{ scheduledDate: '2026-12-01' }] }, utfall: (las) => (las('vift_ronderingspass') || []).length },
+  { id: 'R-BE', sec: 'SEC-ROND-04', anv: 'begransad', ef: 'rondering-pass-write', body: RPP('PASS-C1'), utfall: (las) => passUt(las, 'PASS-C1') },
+  { id: 'R-AL-annans', sec: 'arbetsledaren oförändrad (annans pass)', anv: 'chef', ef: 'rondering-pass-write', body: RPP('PASS-C2', { deviationId: 'AVV-Y' }), utfall: (las) => passUt(las, 'PASS-C2') },
+  { id: 'R-AL-klar', sec: 'arbetsledaren oförändrad (avslutat pass)', anv: 'chef', ef: 'rondering-pass-write', body: RPP('PASS-C3'), utfall: (las) => passUt(las, 'PASS-C3') },
+  { id: 'R-AL-okand', sec: 'arbetsledaren: okänt pass 404', anv: 'chef', ef: 'rondering-pass-write', body: RPP('PASS-FINNS-INTE'), utfall: () => '' },
+  { id: 'R-LAS-pass', sec: 'R52 projektion (pass)', anv: 'falt', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_ronderingspass', 'vift_ronderingsmallar'] }, utfall: (las, svar) => idsAv(svar, 'ronderingspass') + '|' + idsAv(svar, 'ronderingsmallar') },
+  { id: 'R-LAS-ron', sec: 'R52 projektion (rondering utan pris)', anv: 'falt', ef: 'store-key-write', body: lasT3d('ronderingar'), utfall: (las, svar) => idsAv(svar, 'ronderingar') + '|' + faltAv(svar, 'ronderingar') },
+  { id: 'R-LAS-BE', sec: 'R52 (begränsad)', anv: 'begransad', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_ronderingspass', 'vift_ronderingar', 'vift_ronderingsmallar'] }, utfall: (las, svar) => idsAv(svar, 'ronderingspass') + '|' + idsAv(svar, 'ronderingar') + '|' + idsAv(svar, 'ronderingsmallar') },
+  { id: 'R-LAS-logg', sec: 'T3-D beslut 5 (ronderingshändelser)', anv: 'falt', ef: 'store-key-write', body: lasT3d('activityLog'), utfall: (las, svar) => idsAv(svar, 'activityLog') },
+  { id: 'R-APP-egen', sec: 'T3-D beslut 5 (rapportera, eget pass)', anv: 'falt', ef: 'store-key-write', body: app('R1', 'point_ok', { ronderingId: 'RON-C1' }), utfall: (las) => (las('vift_activityLog') || []).some((e) => e.id === 'ACT-PAR-R1') },
+  { id: 'R-APP-annans', sec: 'T3-D beslut 5 (annans rondering)', anv: 'falt', ef: 'store-key-write', body: app('R2', 'point_ok', { ronderingId: 'RON-C2' }), utfall: (las) => (las('vift_activityLog') || []).some((e) => e.id === 'ACT-PAR-R2') },
+  { id: 'R-REST-falt', sec: 'R52 REST (fält)', anv: 'falt', restLas: 'vift_ronderingspass', utfall: (las, svar) => svar.rader },
+  { id: 'R-REST-al', sec: 'R52 REST (arbetsledare)', anv: 'chef', restLas: 'vift_ronderingspass', utfall: (las, svar) => svar.rader },
+  { id: 'C-PASS-D', sec: 'SEC-B5-07 (aktiverad i T4-D)', anv: 'falt', ef: 'get-sensitive-fields', body: { propertyId: 'PROP-R1', passId: 'PASS-C1' }, utfall: gsfUt },
+  { id: 'C-PASS-klar', sec: 'SEC-B5-07 (avslutat pass)', anv: 'falt', ef: 'get-sensitive-fields', body: { propertyId: 'PROP-R1', passId: 'PASS-C3' }, utfall: gsfUt },
+].map((sc) => Object.assign({ varld: t4dVarld, fakeOpts: T3D_OPTS }, sc));
+SCENARIER.push(...T4D_SCEN);
+
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
-const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write', 'get-sensitive-fields'];
+const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write', 'get-sensitive-fields', 'rondering-pass-write'];
 
 function svarAv(s) { const b = s.body || {}; return { status: s.status, error: b.error === undefined ? null : b.error, reason: b.reason === undefined ? null : b.reason }; }
 /* T3-C: REST-scenarier (POST /rest/v1/store med Prefer: resolution=merge-duplicates, som

@@ -23,7 +23,7 @@ const NYA = ['sensitive_fields_read(text,text,text,text,text,text[],uuid,text)',
   '_vift_t4c_rondering_aktiv(text[])', '_vift_t4c_pass_tilldelad(jsonb,text)', '_vift_t4c_pass_aktiv(jsonb)', '_vift_t4c_ao_aktiv(jsonb)'];
 const FIL = 'migrations/20261128000012_t4c_atkomstinformation.sql';
 /* Kedjan före T4-C: utan T4-C och alla senare T4-paket (T4-D …). */
-const SENARE = /_t4[c-z]_/;
+const SENARE = /_t4[c-z]_/; // T4-C och senare (T4-D …)
 const paketFiler = (rot, re) => fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
   .filter((x) => /^\d{14}$/.test(x[0]) && re.test(x[1] || '')).map((x) => x[1]);
 

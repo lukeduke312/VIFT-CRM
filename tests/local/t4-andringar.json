@@ -1,11 +1,17 @@
 {
- "beskrivning": "T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B och T4-C; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen och md5_t4b = i läget efter T4-B, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
+ "beskrivning": "T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B, T4-C och T4-D; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen, md5_t4b = i läget efter T4-B och md5_t4c = i läget efter T4-C, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
  "objekt": {
   "funktion:_store_direct_write_guard()": {
    "paket": "T4-A-notiser",
    "andring": "ÄNDRAD (efter T3-C)",
    "md5": "5661bcc49f0ddc0736104856d890fd42|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T3-C + notiser (punkt 275): REST-vitlistan avvecklad — all direkt skrivning från authenticated/anon nekas (42501 direct_write_blocked)."
+  },
+  "funktion:_vift_activity_type_perms(p_type text)": {
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T3-D)",
+   "md5": "9dc6fd276e8924ac7af2aa9715a1c0a2|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-D: ronderingshändelserna (start, slutförd, punkt) även för rondering_utfor (T3-D beslut 5)."
   },
   "funktion:_vift_auth_staff(p_auth uuid)": {
    "paket": "T4-A",
@@ -14,10 +20,11 @@
    "beskrivning": "T3-B + T4-A: inaktiverad roll ger inga behörigheter (stämpling)."
   },
   "funktion:_vift_ej_verkstallda()": {
-   "paket": "T4-C",
-   "andring": "ÄNDRAD (efter T4-B)",
-   "md5": "7726193c0398be225350ba96d9ef7734|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-E + T4-A + T4-B + T4-C: objects_access_assigned verkställd och borttagen ur registret.",
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T4-C)",
+   "md5": "9da56e7cbc99149e3227a7533f23a239|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-E + T4-A + T4-B + T4-C + T4-D: rondering_utfor verkställd och borttagen ur registret.",
+   "md5_t4c": "7726193c0398be225350ba96d9ef7734|postgres=X/postgres,service_role=X/postgres",
    "md5_t4b": "135587f6c8d5b53c67d12b9762cbfaef|postgres=X/postgres,service_role=X/postgres",
    "md5_t4an": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres"
@@ -33,6 +40,18 @@
    "andring": "NY",
    "md5": "ccbbb6b8c63ad4e204422ed2d0597ffe|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Notiser: projektion per mottagare (userId = anroparen); poster utan mottagarfält lämnas inte ut."
+  },
+  "funktion:_vift_post_refs(p_perms text[], p_staff_id text)": {
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T3-D)",
+   "md5": "efdd49f5d6d1a65e068e3de14c188915|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-D: urvalet får ronderingar med eget tilldelat pass (verkställd rondering_utfor)."
+  },
+  "funktion:_vift_ref_visible(p_field text, p_id text, p_perms text[], p_refs jsonb)": {
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T3-D)",
+   "md5": "e012c73bfea5b24d4a3ebe34c0938065|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-D: ronderingId synlig även via eget pass."
   },
   "funktion:_vift_role_perms(p_roles jsonb, p_role_id text)": {
    "paket": "T4-A",
@@ -298,6 +317,24 @@
    "md5": "7d68b788ce6872da8ff11dc2d4087658|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T4-C: ronderingsgrenen gäller först när rondering_utfor är verkställd (T4-D)."
   },
+  "funktion:_vift_t4d_egna_ronderingar(p_staff_id text)": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "7bd11b6d3b53eeb05b57516fbb65909e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: ronderingar där anroparen har ett eget tilldelat pass."
+  },
+  "funktion:_vift_t4d_las_pass(p_pass_id text, p_staff_id text, p_perms text[], p_mutera boolean, OUT o_passes jsonb, OUT o_idx integer)": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "f6854037d87cd01d4bc5762461397993|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: låser vift_ronderingspass (FOR UPDATE) och prövar passregeln i samma transaktion som åtgärden."
+  },
+  "funktion:_vift_t4d_pass_regel(p_pass jsonb, p_staff_id text, p_perms text[])": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "1f5b8d862ff0364c7e6833ecd0ce4587|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D (SÄK-14, Ö3): passregeln — ao_view_all alla pass; rondering_utfor bara egna, ej avslutade (not_assigned, pass_completed)."
+  },
   "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)": {
    "paket": "T4-B",
    "andring": "ÄNDRAD",
@@ -321,6 +358,54 @@
    "andring": "NY",
    "md5": "faf0dd14e63bf066586131697522e4fa|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Notiser: markera bara egna notiser lästa under radlås (inget orakel för andras id)."
+  },
+  "funktion:rondering_pass_auto_start(p_pass_id text)": {
+   "paket": "T4-D",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset (no-op på avslutat pass). Föregående signatur borttagen."
+  },
+  "funktion:rondering_pass_auto_start(p_pass_id text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "703ae2b987a3bb0041570e4ea9550c9d|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset (no-op på avslutat pass). Föregående signatur borttagen."
+  },
+  "funktion:rondering_pass_complete(p_pass_id text, p_caller_staff_id text)": {
+   "paket": "T4-D",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset. Föregående signatur borttagen."
+  },
+  "funktion:rondering_pass_complete(p_pass_id text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "212a844e7a5fb49ce2429a64088446a3|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset. Föregående signatur borttagen."
+  },
+  "funktion:rondering_pass_save_note(p_pass_id text, p_note text)": {
+   "paket": "T4-D",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset. Föregående signatur borttagen."
+  },
+  "funktion:rondering_pass_save_note(p_pass_id text, p_note text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "b677b88e142d1a5f5d61e78bf0770f54|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset. Föregående signatur borttagen."
+  },
+  "funktion:rondering_point_patch(p_pass_id text, p_category_id text, p_point_id text, p_status text, p_comment text, p_deviation_id text, p_work_order_id text, p_caller_staff_id text, p_is_reset boolean)": {
+   "paket": "T4-D",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset; fältets avvikelse-/AO-referens ignoreras. Föregående signatur borttagen."
+  },
+  "funktion:rondering_point_patch(p_pass_id text, p_category_id text, p_point_id text, p_status text, p_comment text, p_deviation_id text, p_work_order_id text, p_caller_staff_id text, p_is_reset boolean, p_caller_perms text[])": {
+   "paket": "T4-D",
+   "andring": "NY",
+   "md5": "74f9fe33bcb7bc6d5a091c73823c9b4a|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset; fältets avvikelse-/AO-referens ignoreras. Föregående signatur borttagen."
   },
   "funktion:sensitive_fields_read(p_object_id text, p_property_id text, p_work_order_id text, p_pass_id text, p_caller_staff_id text, p_caller_perms text[], p_user_id uuid, p_user_email text)": {
    "paket": "T4-C",
@@ -395,18 +480,22 @@
    "beskrivning": "T4-A: inaktiverad roll ger inga behörigheter (RLS)."
   },
   "funktion:vift_store_full_access(p_key text, p_perms text[])": {
-   "paket": "T4-B",
-   "andring": "ÄNDRAD (efter T4-A-notiser)",
-   "md5": "350b59fd463d37defed588bc7b0975d3|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A + notiser + T4-B: … ; artiklar och prisgrupper i sin helhet bara med prisläsrätt.",
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T4-B)",
+   "md5": "ac5f973491084034d919bf0881853913|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser + T4-B + T4-D: … ; pass, ronderingar och mallar i sin helhet bara för ao_view_all.",
+   "md5_t4c": "350b59fd463d37defed588bc7b0975d3|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "md5_t4b": "350b59fd463d37defed588bc7b0975d3|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
    "md5_t4an": "bf9535f6b86f248b89daddcd8f9d50fe|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "429030d2146ea1997687c83213598ca4|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
-   "paket": "T4-B",
-   "andring": "ÄNDRAD (efter T4-A-notiser)",
-   "md5": "e9a0481d936ec1f5a756f12a8cf035b3|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A + notiser + T4-B: … ; artiklarnas försäljningspris och prisgruppernas timpris bara med prisläsrätt (bara aktiva grupper, namn och typ).",
+   "paket": "T4-D",
+   "andring": "ÄNDRAD (efter T4-B)",
+   "md5": "364b02d2a846461362bfd4897468634c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser + T4-B + T4-D: … ; rondering per pass (egna pass, ronderingen utan pris och intern anteckning, inga mallar); ronderingshändelser för egna pass i aktivitetsloggen.",
+   "md5_t4c": "e9a0481d936ec1f5a756f12a8cf035b3|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4b": "e9a0481d936ec1f5a756f12a8cf035b3|postgres=X/postgres,service_role=X/postgres",
    "md5_t4an": "20543c3d087e2c8679d3c5fb51932438|postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "654d0db82ba49f00d7dabba5720c2342|postgres=X/postgres,service_role=X/postgres"
   },

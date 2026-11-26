@@ -131,6 +131,23 @@ const T4C = {
   store_business_key_merge_write: 'T4-A + T4-C: aktören sätts (set_config vift.aktor) för D-23:s revisionsrad; annars oförändrad.',
 };
 const T4C_FIL = 'migrations/20261128000012_t4c_atkomstinformation.sql';
+/* T4-D (20261128000013): rondering per pass (rondering_utfor, SÄK-14). */
+const T4D = {
+  _vift_t4d_egna_ronderingar: 'T4-D: ronderingar där anroparen har ett eget tilldelat pass.',
+  _vift_t4d_pass_regel: 'T4-D (SÄK-14, Ö3): passregeln — ao_view_all alla pass; rondering_utfor bara egna, ej avslutade (not_assigned, pass_completed).',
+  _vift_t4d_las_pass: 'T4-D: låser vift_ronderingspass (FOR UPDATE) och prövar passregeln i samma transaktion som åtgärden.',
+  rondering_point_patch: 'T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset; fältets avvikelse-/AO-referens ignoreras. Föregående signatur borttagen.',
+  rondering_pass_save_note: 'T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset. Föregående signatur borttagen.',
+  rondering_pass_auto_start: 'T4-D: ny signatur med anroparen; tilldelningskontroll under radlåset (no-op på avslutat pass). Föregående signatur borttagen.',
+  rondering_pass_complete: 'T4-D: ny signatur med p_caller_perms; tilldelningskontroll under radlåset. Föregående signatur borttagen.',
+  _vift_ej_verkstallda: 'T3-E + T4-A + T4-B + T4-C + T4-D: rondering_utfor verkställd och borttagen ur registret.',
+  vift_store_full_access: 'T3-D + T4-A + notiser + T4-B + T4-D: … ; pass, ronderingar och mallar i sin helhet bara för ao_view_all.',
+  vift_store_project: 'T3-D + T4-A + notiser + T4-B + T4-D: … ; rondering per pass (egna pass, ronderingen utan pris och intern anteckning, inga mallar); ronderingshändelser för egna pass i aktivitetsloggen.',
+  _vift_post_refs: 'T3-D + T4-D: urvalet får ronderingar med eget tilldelat pass (verkställd rondering_utfor).',
+  _vift_ref_visible: 'T3-D + T4-D: ronderingId synlig även via eget pass.',
+  _vift_activity_type_perms: 'T3-D + T4-D: ronderingshändelserna (start, slutförd, punkt) även för rondering_utfor (T3-D beslut 5).',
+};
+const T4D_FIL = 'migrations/20261128000013_t4d_rondering.sql';
 
 /* Oförklarade objekt (utan T4-registret) i en kedja, med md5 som jamfor-schema.js räknar. */
 function las(opts) {
@@ -153,6 +170,8 @@ function las(opts) {
     };
     const ut2 = {};
     for (const x of rap.filter((y) => y.kategori === 'OFÖRKLARAD')) ut2[x.typ + ':' + x.key] = { x, md5: def(x.typ, x.key) };
+    /* T4-D: alla funktioner i läget (för objekt som ett senare paket tar bort, t.ex. en ersatt signatur). */
+    Object.defineProperty(ut2, '_alla', { value: new Set(lok.map((f) => 'funktion:' + f.name + '(' + f.args + ')')), enumerable: false });
     return ut2;
   } finally { r.stang(); }
 }
@@ -163,6 +182,7 @@ function las(opts) {
   /* Lägen före varje senare paket (kedjan utan paketet och allt efter det), nyast först.
      md5-nyckeln är versionen i det läget, för objekt som ett senare paket ändrat igen. */
   const LAGER = [
+    { paket: 'T4-D', md5: 'md5_t4c', fore: 'T4-C', las: las({ utelamna: franOchMed(T4D_FIL) }), besk: T4D },
     { paket: 'T4-C', md5: 'md5_t4b', fore: 'T4-B', las: las({ utelamna: franOchMed(T4C_FIL) }), besk: T4C },
     { paket: 'T4-B', md5: 'md5_t4an', fore: 'T4-A-notiser', las: las({ utelamna: franOchMed(T4B_FIL) }), besk: T4B },
     { paket: 'T4-A-notiser', md5: 'md5_t4a', fore: 'T4-A', las: las({ utelamna: franOchMed(NOTIS_FIL) }), besk: NOTISER },
@@ -173,6 +193,8 @@ function las(opts) {
     const namn = x.key.replace(/\(.*$/, '').replace(/^public\.store\./, '').replace(/^store\./, '');
     /* Paketet = det senaste lager där objektet skiljer sig från läget före lagret. */
     let i = LAGER.findIndex((L, n) => { const fore = L.las[k]; const efter = n === 0 ? { md5: m } : LAGER[n - 1].las[k]; return (efter ? efter.md5 : 'saknas') !== (fore ? fore.md5 : 'saknas'); });
+    /* Borttagen funktion som var identisk med STAGING före borttagningen: paketet är lagret där den fanns före men inte efter. */
+    if (i < 0 && x.status === 'SAKNAS LOKALT') i = LAGER.findIndex((L, n) => L.las._alla.has(k) && (n === 0 ? true : !LAGER[n - 1].las._alla.has(k)));
     const L = i >= 0 ? LAGER[i] : null;
     /* Föregående paket som ändrade objektet (för "ÄNDRAD (efter …)"). */
     let fore = null;
@@ -194,7 +216,7 @@ function las(opts) {
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B och T4-C; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen och md5_t4b = i läget efter T4-B, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B, T4-C och T4-D; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen, md5_t4b = i läget efter T4-B och md5_t4c = i läget efter T4-C, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)' || v.md5 === null);
     if (utan.length) { console.log('FAIL beskrivning eller md5 saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }

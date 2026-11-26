@@ -439,7 +439,7 @@ function t4aKalla() {
   const ejv = q(db, `select unnest(public._vift_ej_verkstallda()) as x`).map((x) => x.x).sort();
   /* T4-A-läget: time_view_all och objects_access_assigned är ännu inte verkställda (T4-B respektive T4-C tar bort dem
      ur registret och ur standardroller.json; filen speglar det senaste paketet). */
-  const senareVerkstallda = ['time_view_all', 'objects_access_assigned'].filter((x) => !Object.keys(STD.ejVerkstallda).includes(x));
+  const senareVerkstallda = ['time_view_all', 'objects_access_assigned', 'rondering_utfor'].filter((x) => !Object.keys(STD.ejVerkstallda).includes(x));
   ok(JSON.stringify(ejv) === JSON.stringify(Object.keys(STD.ejVerkstallda).concat(senareVerkstallda).sort()) && ejv.length === 6 && !ejv.some((x) => ['cost_view', 'cost_edit', 'personal_data_view', 'bankgiro_edit'].includes(x)),
     '_vift_ej_verkstallda(): cost_view, cost_edit, personal_data_view och bankgiro_edit borttagna (verkställda i T4-A); registret = standardroller.json ejVerkstallda (6)', ejv);
   ok(['ao_plan_own', 'time_view_all', 'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'].every((x) => ejv.includes(x)), 'kvar som ej verkställda: ao_plan_own (AO-etappen), time_view_all (T4-B), objects_access_assigned (T4-C), rondering_utfor (T4-D), export_data och export_personal_data (T4-F)');

@@ -110,7 +110,10 @@ const nonEmpty = (v) => Array.isArray(v) ? v.length > 0 : (v && typeof v === 'ob
     const lc = await req('/rest/v1/store?select=value&key=eq.vift_lastChanged', { method: 'GET', token: tok });
     const rp = await req('/rest/v1/store?select=value&key=eq.vift_ronderingspass', { method: 'GET', token: tok });
     if (!(Array.isArray(lc.body) && lc.body.length === 1)) restBad.push('lastChanged ej läsbar');
-    if (!(Array.isArray(rp.body) && rp.body.length === 1)) restBad.push('ronderingspass ej läsbar');
+    /* T4-D (R52): vift_ronderingspass läses direkt via REST bara med ao_view_all (admin, chef, ekonomi); fältet
+       läser sina egna pass projicerat via store-key-write (readAllWithHashes). */
+    const rpVantat = ['admin', 'chef', 'ekonomi'].includes(role) ? 1 : 0;
+    if (!(Array.isArray(rp.body) && rp.body.length === rpVantat)) restBad.push('ronderingspass ' + (rpVantat ? 'ej läsbar' : 'läsbar direkt via REST (T4-D)'));
     rep.add('C5 REST ' + role, rest.status === 200 && restBad.length === 0, 'HTTP ' + rest.status + '; synliga känsliga nycklar: ' + [...seen].sort().join(',') + (restBad.length ? '; AVVIKER: ' + restBad.join('; ') : ''));
   }
 
