@@ -2610,7 +2610,15 @@ const LiveSync = {
     if (page !== 'pg-rondering-utfor' && page !== 'pg-rondering-rapport') { LiveSync.stop(); return; }
     if (!LiveSync._passId) return;
     try {
-      const remote = await Storage.get('ronderingspass');
+      /* T4-D (R52): utan ao_view_all döljer servern raden för direkt REST-läsning; fältet läser sina
+         egna pass projicerat via store-key-write (readAllWithHashes). */
+      let remote;
+      if (typeof Auth !== 'undefined' && !Auth.can('ao_view_all')) {
+        const r = await Storage.getAllWithHashes(['vift_ronderingspass']);
+        remote = r && r.ok ? r.data.ronderingspass : null;
+      } else {
+        remote = await Storage.get('ronderingspass');
+      }
       if (!Array.isArray(remote)) return;
       const rp = remote.find(function(p) { return p.id === LiveSync._passId; });
       if (!rp) return;

@@ -11751,10 +11751,10 @@ const AdminPage = {
      ger ingen åtkomst — ingen vy eller knapp i klienten använder dem. */
   /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda
      (vift-v2 20261128000009); cost_edit:s materialradsdel och prisflödet är T4-B.
-     T4-C (2026-11-28): objects_access_assigned verkställd (vift-v2 20261128000012). */
+     T4-C (2026-11-28): objects_access_assigned verkställd (vift-v2 20261128000012).
+     T4-D (2026-11-28): rondering_utfor verkställd (vift-v2 20261128000013). */
   _PERM_EJ_VERKSTALLD: {
     'ao_plan_own':             'AO-etappen',
-    'rondering_utfor':         'T4-D',
     'export_data':             'T4-F',
     'export_personal_data':    'T4-F',
   },

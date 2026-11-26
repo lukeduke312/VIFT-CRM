@@ -286,7 +286,7 @@ const RonderingUtforandePage = {
     const cat  = pass && (pass.categories||[]).find(c=>c.id===catId);
     const pt   = cat && (cat.points||[]).find(p=>p.id===ptId);
     if (!pt) return;
-    const canAO = pt.canCreateAO !== false;
+    const canAO = pt.canCreateAO !== false && (typeof Auth === 'undefined' || Auth.can('ao_view_all')); // T4-D: fältet skapar inte AO här
 
     // Objekt-väljare för fastigheten
     const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
@@ -408,6 +408,17 @@ const RonderingUtforandePage = {
     if (!pass) return;
     const cat  = (pass.categories||[]).find(c=>c.id===catId);
     const pt   = cat && (cat.points||[]).find(p=>p.id===ptId);
+
+    /* T4-D (R53): fältet (rondering_utfor utan ao_view_all) skapar inte avvikelser eller AO — servern
+       nekar dem. Anmärkningen sparas på punkten (status + kommentar med rubriken); arbetsledaren skapar
+       avvikelse/AO från passet. Ingen ändring av vyn i övrigt. */
+    if (typeof Auth !== 'undefined' && !Auth.can('ao_view_all')) {
+      await this._setPointStatus(passId, catId, ptId, 'anmärkning', [title, comment].filter(Boolean).join(' — '));
+      Modal.close();
+      this._avvImages = [];
+      this._refresh();
+      return;
+    }
 
     /* Bygg recurringKey av kategori + punkttitel (används för återkommande-detektering) */
     const ptSlug = (pt ? pt.title : title).toLowerCase().replace(/[^a-zåäö0-9]+/g, '-').replace(/^-|-$/g,'');

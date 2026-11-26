@@ -118,8 +118,10 @@ const Auth = {
     'pg-activities':        ['ao_view_all','ao_view_own'],
     'pg-service-templates': ['offer_manage'],
     'pg-rondering-wizard':  ['ao_view_all'],
-    'pg-rondering-utfor':   ['ao_view_all'],
-    'pg-rondering-rapport': ['ao_view_all'],
+    /* T4-D (2026-11-28, Ö3, R52): fältet med rondering_utfor utför och ser rapporten för sina EGNA pass
+       (servern lämnar bara ut egna pass och prövar varje åtgärd per pass under lås). */
+    'pg-rondering-utfor':   ['ao_view_all','rondering_utfor'],
+    'pg-rondering-rapport': ['ao_view_all','rondering_utfor'],
   },
 
   /* ── JWT ──────────────────────────────────────────────── */
