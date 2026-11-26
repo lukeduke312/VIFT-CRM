@@ -34,7 +34,7 @@ function lasForeDefinitioner() {
   if (!process.env.PGUSER) process.env.PGUSER = 'postgres';
   const { byggReplik } = require('./lib/replik');
   const { q } = require('./lib/db');
-  const r = byggReplik({ utelamna: [FIL], data: false, schemakontroll: false });
+  const r = byggReplik({ utelamna: require('./lib/replik').franOchMed(FIL), data: false, schemakontroll: false }); // T4-C: även senare T4-paket
   try {
     const ut = { f: {}, p: {} };
     for (const sig of ERSATTA) {

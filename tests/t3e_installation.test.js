@@ -216,7 +216,9 @@ const sorterad = (a) => Array.from(new Set(a || [])).sort().join(',');
       'rest:vift_settings': 'cost_view (D-01, T4-A)', 'las:vift_articles': 'cost_view (D-01, T4-A): inköpspris och påslag', 'rest:vift_articles': 'cost_view (D-01, T4-A)',
       'wol': 'cost_view (D-01, T4-A): materialradernas inköpspris',
       'tel': 'payroll_view (D-08): alla tidposter', 'anrop:tid_egen': 'payroll_manage (D-08): fortfarande 403 forbidden, men orsaken blir not_assigned (lönehandläggaren passerar behörighetssteget, tilldelningen nekar) — ingen breddning', 'anrop:tid_pool': 'payroll_manage (D-08): som tid_egen, 403 not_assigned', 'anrop:attest': 'payroll_manage (D-08): attest', 'las:vift_timeEntries': 'payroll_view (D-08)', 'rest:vift_timeEntries': 'payroll_view (D-08)' },
-    e2e_falt: {},
+    /* T4-C (2026-11-28): objects_access_assigned verkställd (D-05) — standardrollen personal får åtkomstinformation
+       för objektet på sin egen tilldelade aktiva AO (200 + allowed-rad) där e2e_falt nekas. */
+    e2e_falt: { 'anrop:portkod_objekt': 'objects_access_assigned (D-05, T4-C): egen tilldelad aktiv AO:s objekt, loggat utan värden' },
     e2e_begransad: {},
   };
   const STD = { admin: 'admin', e2e_arbetsledare: 'chef', e2e_ekonomi: 'ekonomi', e2e_falt: 'personal', e2e_begransad: 'begransad' };
@@ -232,7 +234,7 @@ const sorterad = (a) => Array.from(new Set(a || [])).sort().join(',');
     steg4[e2e] = d;
     ok(oforklarad.length === 0, `steg 4: ${e2e} → ${std}: ${d.length ? 'skillnaderna är beslutade nya behörigheter (' + d.map((k) => k + ' = ' + BESLUTAT[e2e][k]).join('; ') + ')' : 'identisk effektiv åtkomst'} — ingen oavsiktlig breddning`, oforklarad.map((k) => k + ': ' + String(FORE[e2e][k]).slice(0, 120) + ' → ' + String(p[k]).slice(0, 120)));
   }
-  ok(steg4.e2e_falt.length === 0 && steg4.e2e_begransad.length === 0 && steg4.admin.length === 0, 'steg 4: fält, begränsad och admin får exakt samma effektiva åtkomst med standardrollen (ej verkställda behörigheter verkningslösa)');
+  ok(steg4.e2e_falt.every((k) => k === 'anrop:portkod_objekt') && steg4.e2e_begransad.length === 0 && steg4.admin.length === 0, 'steg 4: begränsad och admin får exakt samma effektiva åtkomst med standardrollen, fält skiljer bara i den beslutade åtkomstinformationen (T4-C) (ej verkställda behörigheter verkningslösa)');
   console.log('T3E-STEG4 ' + JSON.stringify(steg4));
   r.stang();
   avsluta();

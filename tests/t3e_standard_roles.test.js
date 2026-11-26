@@ -126,8 +126,8 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
     if (d.length) neutral.push(id + ' utan ej verkställda: ' + d.join(','));
   }
   ok(neutral.length === 0, `ej verkställda behörigheter (${EJV.join(', ')}) är verkningslösa: varje enskild behörighet (och alla tillsammans) lagd till en tom roll, begransad och personal ger EXAKT samma effektiva åtkomst (EF-läsningar av 25 nycklar, work-orders-list, time-entries-list, REST, 23 skrivande anrop med status/error/reason/ändrade resurser); chef, ekonomi och personal med och utan dem är identiska — ingen roll får bredare åtkomst av en ej verkställd behörighet (rättat i 20261128000008)`, neutral);
-  ok(psql(db, `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind in ('f', 'p') and p.proname not in ('_vift_ej_verkstallda', '_vift_t4a_kontakt') and (${EJV.map((e) => `(case when p.prokind in ('f', 'p') then pg_get_functiondef(p.oid) end) like ${lit("%'" + e + "'%")}`).join(' or ')}) and p.proname <> '_vift_staff_external'`) === '0',
-    'ingen SQL-funktion i servern läser en ej verkställd behörighet (utom registret _vift_ej_verkstallda och _vift_staff_external/_vift_t4a_kontakt, som räknar bort dem i övergångsregeln)');
+  ok(psql(db, `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind in ('f', 'p') and p.proname not in ('_vift_ej_verkstallda', '_vift_t4a_kontakt', '_vift_t4c_rondering_aktiv') and (${EJV.map((e) => `(case when p.prokind in ('f', 'p') then pg_get_functiondef(p.oid) end) like ${lit("%'" + e + "'%")}`).join(' or ')}) and p.proname <> '_vift_staff_external'`) === '0',
+    'ingen SQL-funktion i servern läser en ej verkställd behörighet (utom registret _vift_ej_verkstallda och _vift_staff_external/_vift_t4a_kontakt, som räknar bort dem i övergångsregeln, och T4-C:s _vift_t4c_rondering_aktiv, som kräver att rondering_utfor är VERKSTÄLLD innan den läses)');
   const tsTraff = [];
   const fdir = path.join(serverRot(), 'functions');
   const gaIgenom = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((f) => { const p = path.join(d, f.name); if (f.isDirectory()) gaIgenom(p); else if (/\.ts$/.test(f.name)) { const t = fs.readFileSync(p, 'utf8'); EJV.forEach((e) => { if (t.includes("'" + e + "'") || t.includes('"' + e + '"')) tsTraff.push(path.relative(fdir, p) + ':' + e); }); } });
@@ -145,7 +145,9 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   await lika('SEC-CUST-02 (chef − cost_edit)', std('chef'), EGNA.c02, 'VERKSTÄLLD (T4-A) för skyddade fält: chef saknar article_manage, så artikelns inköpspris nekas med och utan (403 forbidden); nya materialraders inköpspris ignoreras utan cost_edit (svarets ignoredFields) — prövat i t4a_skyddade_falt (SEC-B1-14)');
   // SEC-CUST-03: objects_sensitive verkställs i get-sensitive-fields och i projektionen för läsare (T3-D); skrivardelen är T4-A (SÄK-7).
   let a0 = audit();
-  await NEJ('SEC-CUST-03 (chef − objects_sensitive): get-sensitive-fields → 403 "Forbidden: objects_sensitive required"', () => ef.anropa('get-sensitive-fields', { user: U.cust03, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'Forbidden: objects_sensitive required' }, { keys: ['vift_propertyObjects'] });
+  /* T4-C (2026-11-28): get-sensitive-fields nekar med felkoden "forbidden" (katalogen §4) i stället för
+     "Forbidden: objects_sensitive required"; samma status och samma denied-rad. */
+  await NEJ('SEC-CUST-03 (chef − objects_sensitive): get-sensitive-fields → 403 forbidden', () => ef.anropa('get-sensitive-fields', { user: U.cust03, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'forbidden', reason: null }, { keys: ['vift_propertyObjects'] });
   ok(audit() === a0 + 1 && psql(db, `select status || '|' || coalesce(array_to_string(fields, ','), '') from public.sensitive_access_audit order by ts desc limit 1`) === 'denied|', 'SEC-CUST-03: exakt en revisionsrad status=denied utan värden');
   a0 = audit();
   let s = await ef.anropa('get-sensitive-fields', { user: U.chef, body: { objectId: 'OBJ-R1' } });
@@ -169,14 +171,20 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   await NEJ('SEC-CUST-12 (personal − ao_time): create_time på egen AO → 403 forbidden', () => AW(U.cust12, { action: 'create_time', entry: { id: 'TE-C12', aoId: 'AO-A1', date: '2026-11-24', minutes: 60 } }), FORB);
   await NEJ('SEC-CUST-12: personal − ao_time stämplar in på egen AO → 403 forbidden', () => SK(U.cust12, { action: 'setStampStatus', active: true, ts: Date.parse('2026-11-24T08:00:00Z'), aoId: 'AO-A1', expectedRevision: 0 }), FORB);
   await NEJ('SEC-CUST-13 (personal − ao_material): materialrad på egen AO → 403 forbidden (behörighet saknas, ingen reason)', () => AW(U.cust13, { action: 'patch_ao', aoId: 'AO-A1', patch: { materials: val(db, 'vift_workOrders').find((a) => a.id === 'AO-A1').materials.concat([{ id: 'M-C13', name: 'x', qty: 1 }]) } }), FORB);
-  await lika('SEC-CUST-14 (personal − objects_access_assigned)', std('personal'), EGNA.c14, 'VERKNINGSLÖS NU: objects_access_assigned verkställs i T4-C; get-sensitive-fields ger 403 + en denied-rad med och utan den');
+  /* T4-C (2026-11-28): objects_access_assigned är verkställd (D-05); raden prövar nu den beslutade åtkomsten exakt. */
+  await exakt('SEC-CUST-14 (personal − objects_access_assigned)', std('personal'), EGNA.c14, ['anrop:portkod_objekt'],
+    'VERKSTÄLLD (T4-C, D-05): med objects_access_assigned ger get-sensitive-fields åtkomstinformationen för objektet på den egna tilldelade aktiva AO:n (200 + allowed-rad); utan den 403 forbidden + denied-rad — inget annat skiljer');
   a0 = audit();
-  await NEJ('SEC-CUST-14: personal (med objects_access_assigned, T4-C) → get-sensitive-fields 403 i dag', () => ef.anropa('get-sensitive-fields', { user: U.falt, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'Forbidden: objects_sensitive required' }, { keys: ['vift_propertyObjects'] });
-  ok(audit() === a0 + 1, 'SEC-CUST-14: en denied-rad (samma som utan behörigheten)');
+  s = await ef.anropa('get-sensitive-fields', { user: U.falt, body: { objectId: 'OBJ-R1' } });
+  ok(s.status === 200 && s.body.doorCode && audit() === a0 + 1 && /^allowed\|ao:AO-/.test(psql(db, `select status || '|' || detail from public.sensitive_access_audit order by ts desc limit 1`)),
+    'SEC-CUST-14 (+, T4-C): standardrollen personal får åtkomstinformationen för objektet på sin egen aktiva AO, en revisionsrad allowed', s.body);
   await lika('SEC-CUST-15 (personal − rondering_utfor)', std('personal'), EGNA.c15, 'VERKNINGSLÖS NU: rondering_utfor verkställs i T4-D (rondering-pass-write kräver i dag ao_view_all för allt)');
   await JA('SEC-CUST-16 (begransad + ao_time, D-04): tid på egen AO → 200', () => AW(U.cust16, { action: 'create_time', entry: { id: 'TE-C16', aoId: 'AO-A1', date: '2026-11-24', minutes: 60 } }), ['store:vift_timeEntries', 'store:vift_workOrders', 'tabell:op_idempotency']);
   await NEJ('SEC-CUST-16: begransad + ao_time på öppen pool → 403 forbidden/not_assigned', () => AW(U.cust16, { action: 'create_time', entry: { id: 'TE-C16b', aoId: 'AO-P1', date: '2026-11-24', minutes: 60 } }), { status: 403, error: 'forbidden', reason: 'not_assigned' });
-  await lika('SEC-CUST-17 (begransad + objects_access_assigned)', std('begransad'), EGNA.c17, 'VERKNINGSLÖS NU: verkställs i T4-C (då 200 + allowed-rad för egen aktiv AO); i dag ger den varken åtkomstinformation eller kollegornas kontaktuppgifter');
+  /* T4-C: verkställd — en begränsad användare med objects_access_assigned men utan egen aktiv AO på objektet nekas nu
+     med orsaken not_assigned (i stället för behörighet saknas); inga kontaktuppgifter (extern enligt D-04). */
+  await exakt('SEC-CUST-17 (begransad + objects_access_assigned)', std('begransad'), EGNA.c17, ['anrop:portkod_objekt'],
+    'VERKSTÄLLD (T4-C): med objects_access_assigned prövas tilldelningen (403 forbidden/not_assigned utan egen aktiv AO på objektet, 200 med); kollegornas kontaktuppgifter ges fortfarande inte — inget annat skiljer');
   const MW = (u, key, el, prev) => SK(u, { action: 'writeMerge', key, upserts: [{ id: el.id, previous: prev === undefined ? (val(db, key).find((y) => y.id === el.id) || null) : prev, data: el }], removals: [] });
   const stEl = (id, p) => Object.assign({}, val(db, 'vift_staff').find((y) => y.id === id), p);
   const roEl = (id, p) => Object.assign({}, val(db, 'vift_roles').find((y) => y.id === id), p);
@@ -259,7 +267,7 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   x = asUser(db, U.falt, `select public.vift_caller_perms() as p`);
   ok(x.ok && T.kanon((x.rows[0].p || []).slice().sort()) === T.kanon(std('personal').sort()), 'SEC-REST-04 (personal): vift_caller_perms = exakt standardrollens behörigheter', x.rows && x.rows[0]);
   a0 = audit();
-  await NEJ('SEC-B5-09 (begransad): get-sensitive-fields för egen AO:s objekt → 403', () => ef.anropa('get-sensitive-fields', { user: U.begransad, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'Forbidden: objects_sensitive required' }, { keys: ['vift_propertyObjects'] });
+  await NEJ('SEC-B5-09 (begransad): get-sensitive-fields för egen AO:s objekt → 403 forbidden', () => ef.anropa('get-sensitive-fields', { user: U.begransad, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'forbidden', reason: null }, { keys: ['vift_propertyObjects'] });
   ok(audit() === a0 + 1, 'SEC-B5-09: en denied-rad');
   // Matrisen §2 mot effektiv åtkomst: admin = allt; begransad = bara egna AO utan pool, tid, start eller ekonomi.
   const pb = await T.profil(ctx, U.begransad);

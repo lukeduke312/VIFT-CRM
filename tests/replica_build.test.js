@@ -125,24 +125,31 @@ try {
 const rt4 = byggReplik({ data: false });
 try {
   const nya = rt4.steg.filter((x) => x.ny).map((x) => x.rel);
-  /* T4-A, tilläggsdel notiser: 20261128000010 direkt efter T4-A (samma serveromgång). T4-B: 20261128000011 direkt efter. */
-  ok(nya.length === 11 && /^migrations\/20261128000009_t4a_/.test(nya[8]) && /^migrations\/20261128000010_t4a_notiser/.test(nya[9]) && /^migrations\/20261128000011_t4b_/.test(nya[10]),
-    'repokedjan: T4-A-migrationen (20261128000009) efter T3-E, notisdelen (20261128000010) efter T4-A och T4-B (20261128000011) sist i samma serveromgång (' + nya.slice(8).join(', ') + ')');
-  ok(rt4.rapport.oforklarade === 0, `hela repokedjan (T3-B–T3-E + T4-A + notiser + T4-B) mot STAGING-facit: ${rt4.rapport.identiska} identiska, ${rt4.rapport.forklarade} förklarade, 0 oförklarade`);
-  const t4Forklarade = (rt4.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T4-(A(-notiser)?|B) /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
-  ok(JSON.stringify(t4Forklarade) === JSON.stringify(Object.keys(t4).sort()), `varje T4-A-, notis- och T4-B-objekt (${Object.keys(t4).length}) syns i kedjan med registrerad md5, och inga andra avvikelser`, t4Forklarade.length);
+  /* T4-A, tilläggsdel notiser: 20261128000010 direkt efter T4-A (samma serveromgång). T4-B: 20261128000011 direkt efter.
+     T4-C: 20261128000012 efter T4-B. */
+  ok(nya.length === 12 && /^migrations\/20261128000009_t4a_/.test(nya[8]) && /^migrations\/20261128000010_t4a_notiser/.test(nya[9]) && /^migrations\/20261128000011_t4b_/.test(nya[10]) && /^migrations\/20261128000012_t4c_/.test(nya[11]),
+    'repokedjan: T4-A-migrationen (20261128000009) efter T3-E, notisdelen (20261128000010) efter T4-A, T4-B (20261128000011) i samma serveromgång och T4-C (20261128000012) sist (' + nya.slice(8).join(', ') + ')');
+  ok(rt4.rapport.oforklarade === 0, `hela repokedjan (T3-B–T3-E + T4-A + notiser + T4-B + T4-C) mot STAGING-facit: ${rt4.rapport.identiska} identiska, ${rt4.rapport.forklarade} förklarade, 0 oförklarade`);
+  const t4Forklarade = (rt4.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T4-(A(-notiser)?|[B-Z]) /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  ok(JSON.stringify(t4Forklarade) === JSON.stringify(Object.keys(t4).sort()), `varje T4-A-, notis-, T4-B- och T4-C-objekt (${Object.keys(t4).length}) syns i kedjan med registrerad md5, och inga andra avvikelser`, t4Forklarade.length);
   ok(Object.values(t4).filter((v) => v.paket === 'T4-A-notiser').length === 7,
     'notisdelen: 7 objekt med notisdelen som senaste paket (4 nya funktioner, _store_direct_write_guard och de två vitlistepolicyerna ändrade efter T3-C); vift_store_full_access och vift_store_project ändras igen av T4-B (md5_t4an)');
   /* T4-B: 24 nya funktioner (20 regelfunktioner _vift_t4b_*, 3 material-RPC:er, time_entry_correct) och 10 ersatta med samma
      signatur; de som T4-A/notisdelen redan ändrat bär md5_t4an (läget före T4-B) och md5_t4a (T4-A-läget). */
   const t4b = Object.values(t4).filter((v) => v.paket === 'T4-B');
-  ok(t4b.length === 34 && t4b.filter((v) => v.andring === 'NY').length === 24 && Object.values(t4).filter((v) => v.md5_t4an).length === 4,
-    'T4-B: 34 registrerade objekt (24 nya, 10 ersatta med samma signatur; work_order_patch, _vift_ej_verkstallda, vift_store_full_access och vift_store_project bär md5_t4an)', [t4b.length, Object.values(t4).filter((v) => v.md5_t4an).length]);
+  /* T4-C ändrar _vift_ej_verkstallda igen (paket T4-C, md5_t4b); T4-B har därför 33 objekt med T4-B som senaste paket. */
+  ok(t4b.length === 33 && t4b.filter((v) => v.andring === 'NY').length === 24 && Object.values(t4).filter((v) => v.md5_t4an).length === 6,
+    'T4-B: 33 registrerade objekt med T4-B som senaste paket (24 nya, 9 ersatta med samma signatur; _vift_ej_verkstallda ändras igen av T4-C); md5_t4an för work_order_patch, _vift_ej_verkstallda, vift_store_full_access, vift_store_project och de två store_business_key-skrivarna', [t4b.length, Object.values(t4).filter((v) => v.md5_t4an).length]);
+  /* T4-C: 6 nya funktioner (sensitive_fields_read, _vift_t4c_* inkl. triggerfunktionen), triggern och 3 ersatta (_vift_ej_verkstallda,
+     store_business_key_write, store_business_key_merge_write) som bär md5_t4b (läget före T4-C). */
+  const t4c = Object.values(t4).filter((v) => v.paket === 'T4-C');
+  ok(t4c.length === 10 && t4c.filter((v) => v.andring === 'NY').length === 7 && t4c.filter((v) => v.md5_t4b).length === 3 && Object.values(t4).filter((v) => v.md5_t4b).length === 3,
+    'T4-C: 10 registrerade objekt (6 nya funktioner, triggern vift_t4c_kanslig_radering, 3 ersatta med samma signatur som bär md5_t4b)', [t4c.length, t4c.filter((v) => v.andring === 'NY').length]);
   const t3Kvar = (rt4.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-[BCDE] /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
   const t3Ovrigt = Object.keys(t3).filter((k) => !t4[k]).sort();
   ok(JSON.stringify(t3Kvar) === JSON.stringify(t3Ovrigt), `T3-objekt som T4-A och notisdelen inte rör (${t3Ovrigt.length}) har oförändrad T3-md5 i hela kedjan; ${Object.keys(t3).length - t3Ovrigt.length} ändras av T4`, t3Kvar.length);
-  const t4sec = q(rt4.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_t4a\\_%' or p.proname like '\\_vift\\_notis\\_%' or p.proname like '\\_vift\\_t4b\\_%' or p.proname in ('work_order_material_add','work_order_material_update','work_order_material_remove','time_entry_correct','time_entry_create','time_entry_patch','time_entry_soft_delete','store_write_stamp_status','invoice_append_checked','invoice_set_status','vift_store_project','store_business_key_write','store_business_key_merge_write','work_order_patch','_vift_role_perms','_vift_auth_staff','_vift_ej_verkstallda','notification_append','notifications_mark_read','_store_direct_write_guard')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
-  ok(t4sec.length === 0, 'T4-A, notisdelen och T4-B: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role; RLS-hjälparna vift_store_full_access och vift_caller_perms som förut)', t4sec);
+  const t4sec = q(rt4.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_t4a\\_%' or p.proname like '\\_vift\\_notis\\_%' or p.proname like '\\_vift\\_t4b\\_%' or p.proname like '\\_vift\\_t4c\\_%' or p.proname in ('sensitive_fields_read','work_order_material_add','work_order_material_update','work_order_material_remove','time_entry_correct','time_entry_create','time_entry_patch','time_entry_soft_delete','store_write_stamp_status','invoice_append_checked','invoice_set_status','vift_store_project','store_business_key_write','store_business_key_merge_write','work_order_patch','_vift_role_perms','_vift_auth_staff','_vift_ej_verkstallda','notification_append','notifications_mark_read','_store_direct_write_guard')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
+  ok(t4sec.length === 0, 'T4-A, notisdelen, T4-B och T4-C: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role; RLS-hjälparna vift_store_full_access och vift_caller_perms som förut)', t4sec);
   const hj = q(rt4.db, `select p.proname as name from pg_proc p where p.proname in ('vift_store_full_access','vift_caller_perms') and has_function_privilege('authenticated', p.oid, 'execute') and not has_function_privilege('anon', p.oid, 'execute')`);
   ok(hj.length === 2, 'T4-A: RLS-hjälparna vift_store_full_access och vift_caller_perms körbara för authenticated (inte anon), som före T4-A');
 } finally { rt4.stang(); }

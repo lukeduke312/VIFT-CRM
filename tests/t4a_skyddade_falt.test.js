@@ -17,7 +17,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { ok, krav, avsluta } = require('./local/lib/test');
 krav({ tsc: true });
-const { byggReplik, serverRot } = require('./local/lib/replik');
+const { byggReplik, serverRot, franOchMed } = require('./local/lib/replik');
 const { laddaEf } = require('./local/lib/ef');
 const { val, q, psql, psqlFile, rpc, lit, jlit, asUser } = require('./local/lib/db');
 const { expectReject, expectAccept, ksTa, ksDiff, upprepa } = require('./local/lib/kontroll');
@@ -93,7 +93,8 @@ function laddaVarld(db, U) {
 const T4A_COMMIT = '2060b8f';
 const T4B_MIG = 'migrations/20261128000011_t4b_material_priser_tid.sql';
 const T4REG = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't4-andringar.json'), 'utf8')).objekt;
-const EJ_T4B = Object.keys(T4REG).filter((k) => T4REG[k].paket !== 'T4-B');
+/* T4-C: även senare paket (T4-C, T4-D …) saknas i T4-A-läget. */
+const EJ_T4B = Object.keys(T4REG).filter((k) => !/^T4-[B-Z]$/.test(T4REG[k].paket));
 /* OBS-raden får bara nämna T4-B:s objekt (som inte är installerade i T4-A-läget). */
 const obsBaraT4b = (ut) => { const m = /OBS: T4-ändringar som inte syns[^\n]*/.exec(ut); return !m || EJ_T4B.every((k) => !m[0].includes(k)); };
 function t4aKalla() {
@@ -111,7 +112,7 @@ function t4aKalla() {
 
   process.env.T4_LAGE = 'T4-A-notiser';
   const rotT4a = t4aKalla();
-  const r = byggReplik({ utelamna: [T4B_MIG] });
+  const r = byggReplik({ utelamna: franOchMed(T4B_MIG) });
   const { db, U } = r;
   ok(r.steg.some((s) => /20261128000009_t4a_/.test(s.rel)), 'kedjan innehåller T4-A-migrationen 20261128000009');
   ok(r.rapport.oforklarade === 0, `schemajämförelse: 0 oförklarade (T4-A-objekten förklarade via t4-andringar.json): ${r.rapport.identiska} identiska, ${r.rapport.forklarade} förklarade`);
@@ -436,8 +437,10 @@ function t4aKalla() {
 
   // ════════════════ Ej verkställda behörigheter (T3-E-registret) ════════════════
   const ejv = q(db, `select unnest(public._vift_ej_verkstallda()) as x`).map((x) => x.x).sort();
-  /* T4-A-läget: time_view_all är ännu inte verkställd (T4-B tar bort den ur registret och ur standardroller.json). */
-  ok(JSON.stringify(ejv) === JSON.stringify(Object.keys(STD.ejVerkstallda).concat(['time_view_all']).sort()) && ejv.length === 6 && !ejv.some((x) => ['cost_view', 'cost_edit', 'personal_data_view', 'bankgiro_edit'].includes(x)),
+  /* T4-A-läget: time_view_all och objects_access_assigned är ännu inte verkställda (T4-B respektive T4-C tar bort dem
+     ur registret och ur standardroller.json; filen speglar det senaste paketet). */
+  const senareVerkstallda = ['time_view_all', 'objects_access_assigned'].filter((x) => !Object.keys(STD.ejVerkstallda).includes(x));
+  ok(JSON.stringify(ejv) === JSON.stringify(Object.keys(STD.ejVerkstallda).concat(senareVerkstallda).sort()) && ejv.length === 6 && !ejv.some((x) => ['cost_view', 'cost_edit', 'personal_data_view', 'bankgiro_edit'].includes(x)),
     '_vift_ej_verkstallda(): cost_view, cost_edit, personal_data_view och bankgiro_edit borttagna (verkställda i T4-A); registret = standardroller.json ejVerkstallda (6)', ejv);
   ok(['ao_plan_own', 'time_view_all', 'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'].every((x) => ejv.includes(x)), 'kvar som ej verkställda: ao_plan_own (AO-etappen), time_view_all (T4-B), objects_access_assigned (T4-C), rondering_utfor (T4-D), export_data och export_personal_data (T4-F)');
   { // varje nyverkställd behörighet ger exakt den beslutade åtkomsten, och inget mer
@@ -553,7 +556,7 @@ function t4aKalla() {
     aterstall(); }
 
   // ════════════════ Rollback (installera → rollback → installera) ════════════════
-  { const rb = byggReplik({ utelamna: [T4B_MIG], schemakontroll: false });
+  { const rb = byggReplik({ utelamna: franOchMed(T4B_MIG), schemakontroll: false });
     const KS = { keys: ['vift_customers', 'vift_settings', 'vift_roles', 'vift_staff', 'vift_workOrders', 'vift_propertyObjects', 'vift_articles'], tables: ['app_users', 'op_idempotency', 'property_sensitive_access'] };
     // data som T4-A-koden skapar
     let x = rpc(rb.db, 'store_business_key_merge_write', { p_key: 'vift_settings', p_upserts: [{ id: 'slogan', data: 'T4', previous: null }], p_removals: [], p_caller_authorized: true, p_actor_id: rb.U.admin.staffId });

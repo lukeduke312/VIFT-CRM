@@ -117,6 +117,21 @@ const T4B = {
 };
 const T4B_FIL = 'migrations/20261128000011_t4b_material_priser_tid.sql';
 
+/* T4-C (20261128000012): åtkomstinformation (objects_access_assigned), D-23. */
+const T4C = {
+  _vift_t4c_ao_aktiv: 'T4-C (D-05): aktiv AO för åtkomstinformation (nytt/planerad/pågående, inte låst, inte pool).',
+  _vift_t4c_pass_aktiv: 'T4-C: aktivt ronderingspass (planerat/pågående).',
+  _vift_t4c_pass_tilldelad: 'T4-C: anroparen står i passets staffIds.',
+  _vift_t4c_rondering_aktiv: 'T4-C: ronderingsgrenen gäller först när rondering_utfor är verkställd (T4-D).',
+  sensitive_fields_read: 'T4-C (SÄK-7 vägen, D-05): get-sensitive-fields — kontroll (objects_sensitive eller objects_access_assigned på egen tilldelad aktiv AO/pass), läsning och revisionsrad utan värden i EN transaktion under delade lås.',
+  _vift_t4c_kanslig_radering: 'T4-C (D-23): permanent radering av objekt/fastighet tar bort den känsliga raden i samma transaktion, med revisionsrad utan värden.',
+  vift_t4c_kanslig_radering: 'T4-C (D-23): AFTER UPDATE-trigger på store för vift_propertyObjects och vift_properties.',
+  _vift_ej_verkstallda: 'T3-E + T4-A + T4-B + T4-C: objects_access_assigned verkställd och borttagen ur registret.',
+  store_business_key_write: 'T4-A + T4-C: aktören sätts (set_config vift.aktor) för D-23:s revisionsrad; annars oförändrad.',
+  store_business_key_merge_write: 'T4-A + T4-C: aktören sätts (set_config vift.aktor) för D-23:s revisionsrad; annars oförändrad.',
+};
+const T4C_FIL = 'migrations/20261128000012_t4c_atkomstinformation.sql';
+
 /* Oförklarade objekt (utan T4-registret) i en kedja, med md5 som jamfor-schema.js räknar. */
 function las(opts) {
   const r = byggReplik(Object.assign({ data: false, schemakontroll: false }, opts));
@@ -143,33 +158,43 @@ function las(opts) {
 }
 
 {
+  const { franOchMed } = require('./lib/replik');
   const full = las({});
-  const t4an = las({ utelamna: [T4B_FIL] });
-  const t4a = las({ utelamna: [T4B_FIL, NOTIS_FIL] });
+  /* Lägen före varje senare paket (kedjan utan paketet och allt efter det), nyast först.
+     md5-nyckeln är versionen i det läget, för objekt som ett senare paket ändrat igen. */
+  const LAGER = [
+    { paket: 'T4-C', md5: 'md5_t4b', fore: 'T4-B', las: las({ utelamna: franOchMed(T4C_FIL) }), besk: T4C },
+    { paket: 'T4-B', md5: 'md5_t4an', fore: 'T4-A-notiser', las: las({ utelamna: franOchMed(T4B_FIL) }), besk: T4B },
+    { paket: 'T4-A-notiser', md5: 'md5_t4a', fore: 'T4-A', las: las({ utelamna: franOchMed(NOTIS_FIL) }), besk: NOTISER },
+  ];
   const t3reg = JSON.parse(fs.readFileSync(path.join(__dirname, 't3-andringar.json'), 'utf8')).objekt;
   const objekt = {};
   for (const [k, { x, md5: m }] of Object.entries(full)) {
-    const namn = x.key.replace(/\(.*$/, '').replace(/^public\.store\./, '');
-    const iT4an = t4an[k];
-    const iT4a = t4a[k];
-    const t4b = !iT4an || iT4an.md5 !== m;
-    const notis = !t4b && (!iT4a || iT4a.md5 !== m);
-    const paket = t4b ? 'T4-B' : notis ? 'T4-A-notiser' : 'T4-A';
-    const fore = t4b ? (iT4an ? (iT4a && iT4a.md5 === iT4an.md5 ? 'T4-A' : 'T4-A-notiser') : null) : notis ? (iT4a ? 'T4-A' : null) : null;
+    const namn = x.key.replace(/\(.*$/, '').replace(/^public\.store\./, '').replace(/^store\./, '');
+    /* Paketet = det senaste lager där objektet skiljer sig från läget före lagret. */
+    let i = LAGER.findIndex((L, n) => { const fore = L.las[k]; const efter = n === 0 ? { md5: m } : LAGER[n - 1].las[k]; return (efter ? efter.md5 : 'saknas') !== (fore ? fore.md5 : 'saknas'); });
+    const L = i >= 0 ? LAGER[i] : null;
+    /* Föregående paket som ändrade objektet (för "ÄNDRAD (efter …)"). */
+    let fore = null;
+    if (L && L.las[k]) {
+      const m0 = L.las[k].md5;
+      const j = LAGER.slice(i + 1).findIndex((L2) => !L2.las[k] || L2.las[k].md5 !== m0);
+      fore = j < 0 ? 'T4-A' : LAGER[i + 1 + j].paket;
+    }
     objekt[k] = {
-      paket,
+      paket: L ? L.paket : 'T4-A',
       andring: fore ? 'ÄNDRAD (efter ' + fore + ')'
         : t3reg[k] && x.status !== 'SAKNAS LOKALT' ? 'ÄNDRAD (efter ' + t3reg[k].paket + ')'
         : x.status === 'EXTRA LOKALT' ? 'NY' : x.status === 'SAKNAS LOKALT' ? 'BORTTAGEN (ersatt av ny signatur)' : 'ÄNDRAD',
       md5: m,
-      beskrivning: (t4b ? T4B[namn] : notis ? NOTISER[namn] : T4A[namn]) || '(beskrivning saknas)',
+      beskrivning: ((L ? L.besk : T4A)[namn]) || '(beskrivning saknas)',
     };
-    if (iT4an && iT4an.md5 !== m) objekt[k].md5_t4an = iT4an.md5;
-    if (iT4a && iT4a.md5 !== m) objekt[k].md5_t4a = iT4a.md5;
+    /* Versionen i varje äldre läge där den skiljer sig från den installerade. */
+    for (const L2 of LAGER) if (L2.las[k] && L2.las[k].md5 !== m) objekt[k][L2.md5] = L2.las[k].md5;
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser och T4-B; md5_t4a = versionen i T4-A-läget och md5_t4an = versionen i läget T4-A + notisdelen, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B och T4-C; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen och md5_t4b = i läget efter T4-B, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)' || v.md5 === null);
     if (utan.length) { console.log('FAIL beskrivning eller md5 saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }

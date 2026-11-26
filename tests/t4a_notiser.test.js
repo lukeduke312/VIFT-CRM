@@ -18,7 +18,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { ok, krav, avsluta } = require('./local/lib/test');
 krav({ tsc: true });
-const { byggReplik, serverRot } = require('./local/lib/replik');
+const { byggReplik, serverRot, franOchMed } = require('./local/lib/replik');
 const { laddaEf } = require('./local/lib/ef');
 const { val, q, psql, psqlFile, lit, jlit, asUser, asUserAsync, rpc, rpcAsync } = require('./local/lib/db');
 const { expectReject, expectAccept, ksTa, ksDiff, parallellt } = require('./local/lib/kontroll');
@@ -77,7 +77,8 @@ const restUpsert = (rows) => `insert into public.store(key, value) values ${rows
 const T4A_COMMIT = '2060b8f';
 const T4B_MIG = 'migrations/20261128000011_t4b_material_priser_tid.sql';
 const T4REG = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't4-andringar.json'), 'utf8')).objekt;
-const EJ_T4B = Object.keys(T4REG).filter((k) => T4REG[k].paket !== 'T4-B');
+/* T4-C: även senare paket (T4-C, T4-D …) saknas i T4-A-läget. */
+const EJ_T4B = Object.keys(T4REG).filter((k) => !/^T4-[B-Z]$/.test(T4REG[k].paket));
 /* OBS-raden får bara nämna T4-B:s objekt (som inte är installerade i T4-A-läget). */
 const obsBaraT4b = (ut) => { const m = /OBS: T4-ändringar som inte syns[^\n]*/.exec(ut); return !m || EJ_T4B.every((k) => !m[0].includes(k)); };
 function t4aKalla() {
@@ -96,7 +97,7 @@ function t4aKalla() {
 
   process.env.T4_LAGE = 'T4-A-notiser';
   const rotT4a = t4aKalla();
-  const r = byggReplik({ utelamna: [T4B_MIG] });
+  const r = byggReplik({ utelamna: franOchMed(T4B_MIG) });
   const { db, U } = r;
   ok(r.steg.some((s) => s.rel === NOTIS_MIG) && r.steg[r.steg.length - 1].rel === NOTIS_MIG, 'kedjan innehåller notismigrationen 20261128000010 sist (efter T4-A)');
   ok(r.rapport.oforklarade === 0, `schemajämförelse: 0 oförklarade (notisdelens objekt förklarade via t4-andringar.json): ${r.rapport.identiska} identiska, ${r.rapport.forklarade} förklarade`);
@@ -465,7 +466,7 @@ function t4aKalla() {
 
   // ════════════════ Rollback (installera → rollback → installera) och STOP ════════════════
   {
-    const rb = byggReplik({ utelamna: [T4B_MIG], schemakontroll: false });
+    const rb = byggReplik({ utelamna: franOchMed(T4B_MIG), schemakontroll: false });
     laddaVarld(rb.db, rb.U);
     const KS = { keys: ['vift_notifications', 'vift_customers', 'vift_settings', 'vift_roles', 'vift_staff', 'vift_workOrders'], tables: ['app_users', 'op_idempotency'] };
     const efRb = await laddaEf(rb.db, ['store-key-write']);
@@ -496,7 +497,7 @@ function t4aKalla() {
     ok(ksDiff(fore2, ksTa(rb.db, KS)).length === 0, 'rollback hela vägen: ingen data ändrad');
     rb.stang();
     // STOP: notismigrationen på en kedja utan T4-A.
-    const rs = byggReplik({ utelamna: ['migrations/20261128000009_t4a_skyddade_falt.sql', NOTIS_MIG, T4B_MIG], data: false, schemakontroll: false });
+    const rs = byggReplik({ utelamna: franOchMed('migrations/20261128000009_t4a_skyddade_falt.sql'), data: false, schemakontroll: false });
     stop = null;
     try { psqlFile(rs.db, path.join(serverRot(), NOTIS_MIG)); } catch (e) { stop = e.message; }
     ok(stop && /T4-A-notiser STOP: T4-A \(20261128000009\) måste vara installerad först/.test(stop), 'STOP-kontroll: notismigrationen utan T4-A avbryts', stop);

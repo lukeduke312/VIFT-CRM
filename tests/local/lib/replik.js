@@ -43,6 +43,15 @@ function ordning(rot, stagingOnly) {
     }).filter(Boolean);
 }
 
+/* T4-C: migrationen rel och ALLA följande i kedjan (för "läget före paketet X" när senare paket
+   bygger på X och har STOP-kontroller mot det). */
+function franOchMed(rel, rot) {
+  const o = ordning(rot || serverRot()).map((s) => s.rel);
+  const i = o.indexOf(rel);
+  if (i < 0) throw new Error('franOchMed: ' + rel + ' finns inte i MIGRATIONSORDNING.txt');
+  return o.slice(i);
+}
+
 function korKedja(db, rot, opts) {
   opts = opts || {};
   psqlFile(db, path.join(REPO, 'tests', 'local', 'supabase-stubbar.sql'));
@@ -102,4 +111,4 @@ function byggReplik(opts) {
   } catch (e) { stang(); throw e; }
 }
 
-module.exports = { byggReplik, korKedja, ordning, schemakontroll, laddaData, serverRot, REPO, STAGING_SENASTE };
+module.exports = { byggReplik, korKedja, ordning, franOchMed, schemakontroll, laddaData, serverRot, REPO, STAGING_SENASTE };

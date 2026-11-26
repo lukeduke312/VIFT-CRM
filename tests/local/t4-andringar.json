@@ -1,5 +1,5 @@
 {
- "beskrivning": "T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser och T4-B; md5_t4a = versionen i T4-A-läget och md5_t4an = versionen i läget T4-A + notisdelen, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
+ "beskrivning": "T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser, T4-B och T4-C; md5_t4a = versionen i T4-A-läget, md5_t4an = i läget T4-A + notisdelen och md5_t4b = i läget efter T4-B, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
  "objekt": {
   "funktion:_store_direct_write_guard()": {
    "paket": "T4-A-notiser",
@@ -14,10 +14,11 @@
    "beskrivning": "T3-B + T4-A: inaktiverad roll ger inga behörigheter (stämpling)."
   },
   "funktion:_vift_ej_verkstallda()": {
-   "paket": "T4-B",
-   "andring": "ÄNDRAD (efter T4-A)",
-   "md5": "135587f6c8d5b53c67d12b9762cbfaef|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-E + T4-A + T4-B: time_view_all verkställd och borttagen ur registret.",
+   "paket": "T4-C",
+   "andring": "ÄNDRAD (efter T4-B)",
+   "md5": "7726193c0398be225350ba96d9ef7734|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-E + T4-A + T4-B + T4-C: objects_access_assigned verkställd och borttagen ur registret.",
+   "md5_t4b": "135587f6c8d5b53c67d12b9762cbfaef|postgres=X/postgres,service_role=X/postgres",
    "md5_t4an": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres"
   },
@@ -267,6 +268,36 @@
    "md5": "3f9fe6a76949524bd59e3a9cb6bc57f1|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T4-B: markera material som tillägg på fastpris-AO (ao_edit eller invoice_create, R21)."
   },
+  "funktion:_vift_t4c_ao_aktiv(p_ao jsonb)": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "8b975f3f0cd8470af196e12f249962e4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-C (D-05): aktiv AO för åtkomstinformation (nytt/planerad/pågående, inte låst, inte pool)."
+  },
+  "funktion:_vift_t4c_kanslig_radering()": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "76e1dad1e2faee93ac26dd27bb0bcd33|postgres=X/postgres",
+   "beskrivning": "T4-C (D-23): permanent radering av objekt/fastighet tar bort den känsliga raden i samma transaktion, med revisionsrad utan värden."
+  },
+  "funktion:_vift_t4c_pass_aktiv(p_pass jsonb)": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "c530f465463fd2778f7eea1331f0144d|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-C: aktivt ronderingspass (planerat/pågående)."
+  },
+  "funktion:_vift_t4c_pass_tilldelad(p_pass jsonb, p_staff_id text)": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "4408ff7fc29890bc67e66ba57107874e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-C: anroparen står i passets staffIds."
+  },
+  "funktion:_vift_t4c_rondering_aktiv(p_perms text[])": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "7d68b788ce6872da8ff11dc2d4087658|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-C: ronderingsgrenen gäller först när rondering_utfor är verkställd (T4-D)."
+  },
   "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)": {
    "paket": "T4-B",
    "andring": "ÄNDRAD",
@@ -291,6 +322,12 @@
    "md5": "faf0dd14e63bf066586131697522e4fa|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Notiser: markera bara egna notiser lästa under radlås (inget orakel för andras id)."
   },
+  "funktion:sensitive_fields_read(p_object_id text, p_property_id text, p_work_order_id text, p_pass_id text, p_caller_staff_id text, p_caller_perms text[], p_user_id uuid, p_user_email text)": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "5f04f0d9eaee900c6b23c7632d8bedd1|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-C (SÄK-7 vägen, D-05): get-sensitive-fields — kontroll (objects_sensitive eller objects_access_assigned på egen tilldelad aktiv AO/pass), läsning och revisionsrad utan värden i EN transaktion under delade lås."
+  },
   "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text)": {
    "paket": "T4-A",
    "andring": "BORTTAGEN (ersatt av ny signatur)",
@@ -298,10 +335,13 @@
    "beskrivning": "T4-A: ny parameter p_klient; projicerad jämförelse av previous, fältvis sammanslagning, vift_settings fält för fält (D-17), bevarade behörigheter. 5-parametersversionen ersatt."
   },
   "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text, p_klient jsonb)": {
-   "paket": "T4-A",
-   "andring": "NY",
-   "md5": "1e3f1a8b115fdca16bf5b1f7aac95cab|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T4-A: ny parameter p_klient; projicerad jämförelse av previous, fältvis sammanslagning, vift_settings fält för fält (D-17), bevarade behörigheter. 5-parametersversionen ersatt."
+   "paket": "T4-C",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "4f430049d563ef3afe3c945c2295addf|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-A + T4-C: aktören sätts (set_config vift.aktor) för D-23:s revisionsrad; annars oförändrad.",
+   "md5_t4b": "1e3f1a8b115fdca16bf5b1f7aac95cab|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4an": "1e3f1a8b115fdca16bf5b1f7aac95cab|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4a": "1e3f1a8b115fdca16bf5b1f7aac95cab|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text)": {
    "paket": "T4-A",
@@ -310,10 +350,13 @@
    "beskrivning": "T4-A: ny parameter p_klient; fältvis sammanslagning av skyddade fält och bevarade behörigheter för äldre klient. 5-parametersversionen ersatt."
   },
   "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text, p_klient jsonb)": {
-   "paket": "T4-A",
-   "andring": "NY",
-   "md5": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T4-A: ny parameter p_klient; fältvis sammanslagning av skyddade fält och bevarade behörigheter för äldre klient. 5-parametersversionen ersatt."
+   "paket": "T4-C",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "f04f304ab2f5d4892b6ebb9a0c976a55|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-A + T4-C: aktören sätts (set_config vift.aktor) för D-23:s revisionsrad; annars oförändrad.",
+   "md5_t4b": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4an": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4a": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:store_write_stamp_status(p_auth_user_id uuid, p_active boolean, p_ts bigint, p_ao_id text, p_expected_revision bigint)": {
    "paket": "T4-B",
@@ -404,6 +447,12 @@
    "andring": "ÄNDRAD (efter T3-C)",
    "md5": "64169b318cbf2c49f2c03ef25af6ff41",
    "beskrivning": "T3-C + notiser (punkt 275): RESTRICTIVE UPDATE med WITH CHECK (false) — vitlistan tom."
+  },
+  "trigger:store.vift_t4c_kanslig_radering": {
+   "paket": "T4-C",
+   "andring": "NY",
+   "md5": "a93e5f452a1fcd192e7d372b5fa172c5",
+   "beskrivning": "T4-C (D-23): AFTER UPDATE-trigger på store för vift_propertyObjects och vift_properties."
   }
  }
 }

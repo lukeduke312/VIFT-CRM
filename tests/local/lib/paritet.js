@@ -340,9 +340,34 @@ const T4B_SCEN = [
 ].map((sc) => Object.assign({ varld: t4bVarld, fakeOpts: T3D_OPTS }, sc));
 SCENARIER.push(...T4B_SCEN);
 
+/* ── T4-C (2026-11-28): åtkomstinformation (get-sensitive-fields, objects_access_assigned) ──
+   Världen: personalrollen har objects_access_assigned (som standardrollen personal) och rondering_utfor;
+   ett pass på PROP-R1 tilldelat fältet. Utfall: de fält som lämnas ut (namn, inga värden). */
+const t4cVarld = (store, d) => {
+  t4bVarld(store, d);
+  store.vift_roles = store.vift_roles.map((r) => (r.id === 'personal' ? Object.assign({}, r, { permissions: r.permissions.concat(['objects_access_assigned', 'rondering_utfor']) }) : r));
+  store.vift_ronderingspass = [{ id: 'PASS-C1', ronderingId: 'RON-C1', propertyId: 'PROP-R1', customerId: 'CU-R1', staffIds: [d.U.falt.staffId], status: 'planerat', categories: [], summary: {} }];
+};
+const GSF = (b) => b;
+const gsfUt = (las, svar) => Object.keys(svar.body || {}).filter((k) => (svar.body || {})[k] != null && !['error', 'reason'].includes(k)).sort().join(',');
+const T4C_SCEN = [
+  { id: 'C-AO-egen', sec: 'SEC-B5-06 (egen tilldelad aktiv AO)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1', workOrderId: 'AO-A1' }), utfall: gsfUt },
+  { id: 'C-AO-utanref', sec: 'SEC-B5-06 (utan AO-referens)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1' }), utfall: gsfUt },
+  { id: 'C-AO-annans', sec: 'SEC-B5-08 (annans AO)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1', workOrderId: 'AO-A8' }), utfall: gsfUt },
+  { id: 'C-AO-klar', sec: 'SEC-B5-08 (klar AO)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1', workOrderId: 'AO-A3' }), utfall: gsfUt },
+  { id: 'C-AO-pool', sec: 'SEC-B5-08 (öppen pool)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1', workOrderId: 'AO-P1' }), utfall: gsfUt },
+  { id: 'C-OBJ-annat', sec: 'SEC-B5-08 (objekt utan egen AO)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R2' }), utfall: gsfUt },
+  { id: 'C-BE', sec: 'SEC-B5-09 (begränsad, egen AO)', anv: 'begransad', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1' }), utfall: gsfUt },
+  { id: 'C-AL', sec: 'objects_sensitive (oförändrat)', anv: 'chef', ef: 'get-sensitive-fields', body: GSF({ objectId: 'OBJ-R1' }), utfall: gsfUt },
+  { id: 'C-FAST', sec: 'SEC-B5-06 (fastighetsnivå)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ propertyId: 'PROP-R1' }), utfall: gsfUt },
+  { id: 'C-PASS', sec: 'SEC-B5-07 (pass, före T4-D avstängt)', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ propertyId: 'PROP-R1', passId: 'PASS-C1' }), utfall: gsfUt },
+  { id: 'C-INDATA', sec: 'missing_fields', anv: 'falt', ef: 'get-sensitive-fields', body: GSF({ workOrderId: 'AO-A1' }), utfall: gsfUt },
+].map((sc) => Object.assign({ varld: t4cVarld, fakeOpts: T3D_OPTS }, sc));
+SCENARIER.push(...T4C_SCEN);
+
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
-const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write'];
+const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write', 'get-sensitive-fields'];
 
 function svarAv(s) { const b = s.body || {}; return { status: s.status, error: b.error === undefined ? null : b.error, reason: b.reason === undefined ? null : b.reason }; }
 /* T3-C: REST-scenarier (POST /rest/v1/store med Prefer: resolution=merge-duplicates, som
@@ -381,6 +406,8 @@ async function korParitet(opts) {
       // ── fake ──
       const fake = new FakeSupabase(Object.assign({}, FAKE_STD, (typeof sc.fakeOpts === 'function' ? sc.fakeOpts() : sc.fakeOpts) || {}));
       fake.store = new Map(Object.entries(clone(d.store)));
+      /* T4-C: samma känsliga rader som replikan (property_sensitive_access), nyckel = objekt-id (annars fastighet). */
+      (d.kansliga || []).forEach((k) => fake.sensitive.set(k.object_id || k.property_id, { doorCode: k.door_code || '', keyInformation: k.key_information || '', keyReceipt: k.key_receipt || '', alarmInformation: k.alarm_information || '', accessInformation: k.access_information || '', accessCode: k.access_code || '' }));
       fake.users = {};
       d.anvandare.forEach((u) => { fake.users[u.email] = { id: u.authId, email: u.email, password: 'replik', alias: u.alias, active: u.appActive }; });
       const tokFor = (alias) => fake.issue(fake.users[d.U[alias].email]).access_token;
