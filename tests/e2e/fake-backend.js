@@ -20,6 +20,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+/* T4-A (2026-11-28): skyddade fält, projektion även för skrivare, staff_contacts_view,
+   activity_log_view_all, inaktiverad roll, åtkomst per post (t4a-regler.js = serverns regler). */
+const T4A = require('./t4a-regler');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -202,12 +205,13 @@ const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'activ
 const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
 /* T3-E (20261128000008): ej verkställda behörigheter (= _vift_ej_verkstallda()) räknas inte när
    servern avgör intern/extern — de ger ingen åtkomst förrän T4. */
-const T3E_EJ_VERKSTALLDA = ['ao_plan_own', 'cost_view', 'cost_edit', 'time_view_all', 'bankgiro_edit', 'personal_data_view',
-  'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'];
+const T3E_EJ_VERKSTALLDA = T4A.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda
 const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'].concat(T3E_EJ_VERKSTALLDA);
 const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
   'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
-const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activities', 'vift_offers', 'vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts'];
+const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activities', 'vift_offers', 'vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts',
+  /* T4-A: inställningar, artiklar och urval per post för återkommande, projekt, avvikelser, inspektioner. */
+  'vift_settings', 'vift_articles', 'vift_recurringOrders', 'vift_projects', 'vift_avvikelser', 'vift_inspections'];
 const anyOf = (p, list) => list.some((x) => p.includes(x));
 const pick = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => keys.includes(k)));
 const omit = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k)));
@@ -216,6 +220,12 @@ const taskAo = (t) => (t && t.relatedType === 'workOrder' && t.relatedId ? Strin
 function t3dFull(key, perms, keyPerms) {
   const p = Array.isArray(perms) ? perms : [];
   if (p.includes('all')) return true;
+  /* T4-A: giltig behörighet, activity_log_view_all, läsrätt till alla skyddade fält (även skrivare),
+     urval per post för återkommande/projekt/inspektioner/avvikelser. */
+  if (!T4A.giltig(p)) return false;
+  if (key === 'vift_activityLog') return T4A.loggFull(p);
+  if (!T4A.allaLasbara(key, p)) return false;
+  if (['vift_recurringOrders', 'vift_projects', 'vift_inspections', 'vift_avvikelser'].includes(key)) return T4A.kundLas(p);
   const wp = keyPerms[key]; if (wp && p.includes(wp)) return true;
   switch (key) {
     case 'vift_offers': case 'vift_offerEvents': case 'vift_offerAttachments': return p.includes('offer_manage');
@@ -223,10 +233,10 @@ function t3dFull(key, perms, keyPerms) {
     case 'vift_salesOpps': return anyOf(p, ['sales_manage', 'reports_view']);
     case 'vift_contracts': return anyOf(p, ['customer_manage', 'invoice_view', 'invoice_create', 'reports_view']);
     case 'vift_customers': return anyOf(p, T3D_KUND) && p.includes('objects_sensitive');
-    case 'vift_propertyObjects': case 'vift_recurringOrders': return p.includes('objects_sensitive');
+    case 'vift_propertyObjects': return p.includes('objects_sensitive');
+    case 'vift_settings': return anyOf(p, ['admin_manage', 'invoice_view', 'invoice_create', 'reports_view', 'offer_manage', 'ao_view_all', 'ao_edit']);
     case 'vift_staff': return anyOf(p, ['staff_manage', 'admin_manage']);
     case 'vift_roles': return false;
-    case 'vift_activityLog': return p.includes('ao_view_all');
     case 'vift_activities': return p.includes('ao_edit') && p.includes('ao_view_all');
     case 'vift_properties': return p.includes('objects_sensitive') && anyOf(p, T3D_KUND);
     case 'vift_propertyContacts': return anyOf(p, T3D_KUND);
@@ -319,7 +329,8 @@ class FakeSupabase {
     const st = this.staffFor(email);
     if (!st) return [];
     const r = (this.get('roles') || []).find((x) => x.id === st.role);
-    return r && Array.isArray(r.permissions) ? r.permissions : [];
+    /* T4-A: inaktiverad roll ger inga behörigheter (checkViftAuth, _vift_role_perms). */
+    return r && Array.isArray(r.permissions) && T4A.rollAktiv(r) ? r.permissions : [];
   }
   has(perms, p) { return perms.includes('all') || perms.includes(p); }
   /* T3-B: läsning = ao_view_all, annars ao_view_own och (inte arkiverad/borttagen) och
@@ -354,15 +365,24 @@ class FakeSupabase {
   /* T3-D: vift_store_project för nycklarna i T3D_KEYS (T3-C:s regel för roller oförändrad). */
   t3dProject(key, value, perms, me) {
     const p = Array.isArray(perms) ? perms : [];
-    if (value === null || value === undefined || !T3D_KEYS.includes(key)) return value;
+    if (value === null || value === undefined) return value;
+    /* T4-A (punkt 7): utan giltig behörighet inga verksamhetsdata — bara egen personalpost och roll. */
+    if (!p.includes('all') && !T4A.giltig(p) && key !== 'vift_staff' && key !== 'vift_roles' && key.startsWith('vift_')) {
+      return Array.isArray(value) ? [] : (value && typeof value === 'object' ? {} : null);
+    }
+    if (!T3D_KEYS.includes(key)) return value;
     if (key === 'vift_roles') return projectStaffRoles(key, value, perms, me, this.get('staff'));
     if (t3dFull(key, p, edgeModules().keyPerms)) return value;
+    /* T4-A (D-17, D-01): inställningar utan bankgiro (icke-interna) och utan intern timkostnad (utan cost_view). */
+    if (key === 'vift_settings') return value && typeof value === 'object' && !Array.isArray(value) ? T4A.proj(key, value, p) : value;
     if (!Array.isArray(value)) return value;
     const id = me && me.id ? String(me.id) : '';
     const obj = (e) => e && typeof e === 'object' && !Array.isArray(e);
     const refs = () => this.t3dRefs(p, id);
+    if (key === 'vift_articles') return value.map((e) => T4A.proj(key, e, p));
     if (key === 'vift_staff') {
-      const ext = !p.some((x) => !T3D_EXTERN_OK.includes(x));
+      /* T4-A: arbetskontakt till kollegor = staff_contacts_view (övergång: T3-E:s härledning). */
+      const ext = !T4A.kontakt(p);
       const sv = p.includes('staff_view');
       const r = ext && !sv ? refs() : { staff: [] };
       return value.filter((e) => obj(e) && (String(e.id) === id || !ext || sv || r.staff.includes(String(e.id))))
@@ -381,14 +401,23 @@ class FakeSupabase {
         : key === 'vift_properties' ? r.properties.includes(String(e.id || ''))
           : key === 'vift_propertyObjects' ? r.objects.includes(String(e.id || ''))
             : r.properties.includes(String(e.propertyId || '')) && (!e.objectId || r.objects.includes(String(e.objectId))));
-      return value.filter((e) => obj(e) && syns(e)).map((e) => {
-        if (key !== 'vift_customers') return omit(e, T3D_SENS);
-        if (anyOf(p, T3D_KUND)) return omit(e, T3D_SENS);
-        return omit(e, T3D_SENS.concat(['personnr'], ['privat', 'private', 'privatperson'].includes(String(e.type || '').toLowerCase()) ? ['orgNr'] : []));
-      });
+      /* T4-A (SÄK-7, D-13): skyddade fält projiceras även för skrivaren; urval per uppdrag utan portkoder. */
+      return value.filter((e) => obj(e) && syns(e)).map((e) => (r ? omit(T4A.proj(key, e, p), T3D_SENS) : T4A.proj(key, e, p)));
+    }
+    /* T4-A (punkt 7): återkommande, projekt, avvikelser, inspektioner per post. */
+    if (['vift_recurringOrders', 'vift_projects', 'vift_avvikelser', 'vift_inspections'].includes(key)) {
+      if (T4A.kundLas(p)) return value.map((e) => T4A.proj(key, e, p));
+      if (key === 'vift_inspections') return [];
+      const aos = (this.get('workOrders') || []).filter((a) => a && a.id && this.canViewAOContent(a, p, id));
+      if (key === 'vift_avvikelser') { const ids = aos.map((a) => String(a.id)); return value.filter((e) => obj(e) && ids.includes(String(e.workOrderId || ''))); }
+      const fld = key === 'vift_recurringOrders' ? 'recurringOrderId' : 'projectId';
+      const ids = aos.map((a) => a[fld]).filter((x) => x != null && x !== '').map(String);
+      return value.filter((e) => obj(e) && ids.includes(String(e.id || ''))).map((e) => omit(T4A.proj(key, e, p), T3D_SENS));
     }
     if (key === 'vift_activityLog') {
-      const r = refs();
+      /* T4-A (T3-D 6): utan activity_log_view_all bara AO där anroparen är tilldelad (eller ser med innehåll utan ao_view_all). */
+      const p2 = p.includes('ao_view_all') ? p.filter((x) => x !== 'ao_view_all').concat(['ao_view_own']) : p;
+      const r = this.t3dRefs(p2, id);
       return value.filter((e) => obj(e) && T3D_AO_LOG.includes(e.type) && r.ao.includes(String(e.workOrderId || '')) && !e.offerId && !e.invoiceId && !e.salesOpportunityId);
     }
     if (key === 'vift_activities') {
@@ -414,6 +443,13 @@ class FakeSupabase {
       case 'deviationId': return t3dFull('vift_avvikelser', p, kp);
       default: return false;
     }
+  }
+  /* T4-A: AO i ett skrivsvar projiceras som en läsning (ao-time-write, log/checklist-EF:erna, invoice-write). */
+  _t4aAoSvar(res, perms) {
+    if (res && res.body && typeof res.body === 'object' && res.body.workOrder && typeof res.body.workOrder === 'object') {
+      res = Object.assign({}, res, { body: Object.assign({}, res.body, { workOrder: T4A.projectWorkOrder(clone(res.body.workOrder), perms) }) });
+    }
+    return res;
   }
   /* Fel-injektion: första matchande regel som har kvarvarande gånger. */
   fault(action) {
@@ -530,24 +566,24 @@ class FakeSupabase {
       const me = this.staffFor(email);
       switch (fn) {
         case 'store-key-write': return this.storeKeyWrite(body, email, perms, me);
-        case 'ao-time-write': return this.aoTimeWrite(body, perms, me, { email });
+        case 'ao-time-write': return this._t4aAoSvar(this.aoTimeWrite(body, perms, me, { email }), perms);
         case 'work-orders-list': {
-          // T3-B: poolregel + poolprojektion (K-03); C-5: accessCode bara med objects_sensitive/ao_edit.
+          // T3-B: poolregel + poolprojektion (K-03); T4-A: projectWorkOrder (portkod bara med objects_sensitive,
+          // även för ao_edit; inköpspris bara med cost_view; AO-ekonomi inte till fältroller, D-06).
           const full = this.has(perms, 'ao_view_all');
-          const redact = !(this.has(perms, 'objects_sensitive') || this.has(perms, 'ao_edit'));
           const list = (this.get('workOrders') || []).filter((a) => this.canViewAO(a, perms, me.id))
             .map((a) => (!full && !isAssigned(a, me.id) && isOpenPool(a) ? poolProjection(a) : a))
-            .map((a) => { if (redact) delete a.accessCode; return a; });
+            .map((a) => T4A.projectWorkOrder(a, perms));
           return { status: 200, body: { workOrders: list } };
         }
         case 'time-entries-list': {
           const all = this.get('timeEntries') || [];
           return { status: 200, body: { timeEntries: this.has(perms, 'payroll_view') ? all : all.filter((t) => t.staffId === me.id) } };
         }
-        case 'invoice-write': return this.invoiceWrite(body, perms, me);
+        case 'invoice-write': return this._t4aAoSvar(this.invoiceWrite(body, perms, me), perms);
         case 'rondering-pass-write': return this.ronderingWrite(body, perms, me);
-        case 'work-order-checklist-resolve': return this.checklistResolve(body, perms, me);
-        case 'work-order-log-write': return this.logWrite(body, perms, me);
+        case 'work-order-checklist-resolve': return this._t4aAoSvar(this.checklistResolve(body, perms, me), perms);
+        case 'work-order-log-write': return this._t4aAoSvar(this.logWrite(body, perms, me), perms);
         case 'work-order-image-upload': return this.imageUpload(body, perms, me, headers);
         case 'work-order-image-url': return this.imageUrl(body, perms, me);
         case 'work-order-image-delete': return this.imageDelete(body, perms, me);
@@ -651,14 +687,23 @@ class FakeSupabase {
         if (this.opts.activityAppend && body.key === 'vift_activityLog') return DEFINITE(403, 'append_only');
         if (!this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
         const cur = this.store.get(body.key);
-        if (body.expectedHash != null && body.expectedHash !== sha(cur)) return { status: 409, body: { error: 'conflict', current: clone(cur), hash: sha(cur) } };
+        /* T4-A: konfliktsvaret lämnar bara ut den projicerade bilden (som en läsning). */
+        if (body.expectedHash != null && body.expectedHash !== sha(cur)) return { status: 409, body: { error: 'conflict', current: this.t3dProject(body.key, clone(cur), perms, me), hash: sha(cur) } };
+        /* T4-A (B5, D-13, D-17, D-01): fältvis sammanslagning av skyddade fält (som store_business_key_write). */
+        let value = clone(body.value);
+        if (T4A.falt(body.key).length) {
+          const r = value && typeof value === 'object' && !Array.isArray(value) ? T4A.sammanfoga(body.key, clone(cur), value, perms) : T4A.sammanfogaLista(body.key, clone(cur), value, perms);
+          if (!r.ok) return REGEL(403, 'forbidden', r.reason);
+          value = r.value;
+        }
+        if (body.key === 'vift_roles' && Array.isArray(value)) value = value.map((n) => T4A.rollerBevara(regGet(cur, n && n.id), n, body.klient));
         {
           const s0 = this.get('staff'), r0 = this.get('roles');
-          const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? body.value : s0, body.key === 'vift_roles' ? body.value : r0, me && me.id, this.users);
+          const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? value : s0, body.key === 'vift_roles' ? value : r0, me && me.id, this.users);
           if (deny) return deny;
         }
-        this.store.set(body.key, clone(body.value)); this.touch();
-        return { status: 200, body: { ok: true, hash: sha(body.value), current: clone(body.value) } };
+        this.store.set(body.key, clone(value)); this.touch();
+        return { status: 200, body: { ok: true, hash: sha(value), current: this.t3dProject(body.key, clone(value), perms, me) } };
       }
       case 'appendActivity': {
         if (!this.opts.activityAppend) return DEFINITE(400, 'unknown_action');
@@ -687,21 +732,52 @@ class FakeSupabase {
           const reason = pol ? edgeModules().policy.activitiesRefusal(pol.reason) : null;
           return reason ? REGEL(403, 'forbidden', reason) : DEFINITE(403, 'forbidden');
         }
+        /* T4-A (D-17): vift_settings fält för fält (som store_business_key_merge_write). */
+        if (body.key === 'vift_settings') {
+          let cur = clone(this.store.get(body.key)) || {};
+          const vy = T4A.proj(body.key, cur, perms);
+          const conflicts = [];
+          for (const u of (body.upserts || [])) {
+            if (!u || !u.id || u.data === undefined) return DEFINITE(400, 'invalid_element');
+            if (!T4A.lika(u.previous === undefined ? null : u.previous, vy[u.id] === undefined ? null : vy[u.id])) { conflicts.push({ id: u.id, reason: 'changed_by_other_session' }); continue; }
+            const r = T4A.sammanfoga(body.key, cur, Object.assign({}, T4A.proj(body.key, cur, perms), { [u.id]: u.data }), perms);
+            if (!r.ok) return REGEL(403, 'forbidden', r.reason);
+            cur = r.value;
+          }
+          for (const rm of (body.removals || [])) {
+            if (!rm || !rm.id) return DEFINITE(400, 'invalid_element');
+            if (!(rm.id in cur)) continue;
+            if (!T4A.lika(rm.previous === undefined ? null : rm.previous, vy[rm.id] === undefined ? null : vy[rm.id])) { conflicts.push({ id: rm.id, reason: 'changed_by_other_session' }); continue; }
+            if (!T4A.kanSkriva(body.key, rm.id, cur, perms)) return REGEL(403, 'forbidden', 'field_protected');
+            delete cur[rm.id];
+          }
+          this.store.set(body.key, cur); this.touch();
+          return { status: 200, body: { current: this.t3dProject(body.key, clone(cur), perms, me), conflicts, hash: sha(cur) } };
+        }
         const arr = clone(this.store.get(body.key)) || [];
         const ids = arr.map((e) => e && e.id).filter((x) => x != null);
         if (new Set(ids).size !== ids.length) return DEFINITE(409, 'duplicate_id_in_store');
         const conflicts = [];
         const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+        /* T4-A: previous jämförs med elementet så som anroparen får se det; skyddade fält sammanfogas. */
+        const skyddad = T4A.falt(body.key).length > 0;
+        const vy = (e) => (skyddad && e ? T4A.proj(body.key, e, perms) : e);
+        let avslag = null;
         (body.upserts || []).forEach((u) => {
+          if (avslag) return;
           const i = arr.findIndex((e) => e && String(e.id) === String(u.id));
           const cur = i >= 0 ? arr[i] : null;
-          if (!same(cur, u.previous)) { conflicts.push({ id: u.id, current: clone(cur) }); return; }
-          if (i >= 0) arr[i] = clone(u.data); else arr.push(clone(u.data));
+          if (!(cur ? T4A.lika(vy(cur), u.previous) : same(cur, u.previous))) { conflicts.push({ id: u.id, current: clone(cur) }); return; }
+          let data = clone(u.data);
+          if (skyddad) { const r = T4A.sammanfoga(body.key, cur, data, perms); if (!r.ok) { avslag = r.reason; return; } data = r.value; }
+          if (body.key === 'vift_roles' && cur) data = T4A.rollerBevara(cur, data, body.klient);
+          if (i >= 0) arr[i] = data; else arr.push(data);
         });
+        if (avslag) return REGEL(403, 'forbidden', avslag);
         (body.removals || []).forEach((r) => {
           const i = arr.findIndex((e) => e && String(e.id) === String(r.id));
           if (i < 0) return;
-          if (!same(arr[i], r.previous)) { conflicts.push({ id: r.id, current: clone(arr[i]) }); return; }
+          if (!T4A.lika(vy(arr[i]), r.previous)) { conflicts.push({ id: r.id, current: clone(arr[i]) }); return; }
           arr.splice(i, 1);
         });
         {
@@ -778,7 +854,7 @@ class FakeSupabase {
   /* Fältets materialrader (_vift_ao_material_merge): bara egna rader får ändras/tas bort. */
   _materialMerge(old, neu, meId) {
     old = Array.isArray(old) ? old : []; neu = Array.isArray(neu) ? neu : [];
-    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const same = (a, b) => jsonEq(a, b); // T4-A: som jsonb-jämförelsen (nyckelordning spelar ingen roll)
     for (const o of old) {
       if (o && o.addedBy === meId) continue;
       if (o && o.id) { const n = neu.find((x) => x && x.id === o.id); if (!n || !same(n, o)) return null; }
@@ -797,6 +873,12 @@ class FakeSupabase {
       case 'create_ao': {
         if (!this.has(perms, 'ao_create')) return DEFINITE(403, 'forbidden');
         const ao = clone(b.ao);
+        /* T4-A: portkod kräver objects_sensitive; inköpspris i nya rader utan cost_edit ignoreras. */
+        if (!this.has(perms, 'objects_sensitive') && T4A.SENS.some((f) => !T4A.tom(ao[f]))) return REGEL(403, 'forbidden', 'field_protected');
+        const ignoredCreate = [];
+        if (!(this.has(perms, 'cost_view') && this.has(perms, 'cost_edit')) && Array.isArray(ao.materials)) {
+          ao.materials = ao.materials.map((m) => { if (m && typeof m === 'object' && !T4A.tom(m.buyPrice)) { m = Object.assign({}, m); delete m.buyPrice; if (!ignoredCreate.length) ignoredCreate.push('materials[].buyPrice'); } return m; });
+        }
         if (ao.id && aos.some((a) => a.id === ao.id)) return DEFINITE(409, 'id_collision');
         if (!ao.id) ao.id = 'AO-' + (++this.aoSeq);
         // T3-B punkt 245: nästa nummer = max(befintliga AO-nummer) + 1, aldrig avkortat.
@@ -807,7 +889,7 @@ class FakeSupabase {
         this.aoSeq = n; ao.displayNumber = fmt(n);
         if (ao.status === 'pool' && aoStaffOf(ao).length > 0) ao.poolOpen = false;
         ao.createdAt = now; ao.updatedAt = now; aos.push(ao); save();
-        return { status: 200, body: { workOrder: ao } };
+        return { status: 200, body: Object.assign({ workOrder: ao }, ignoredCreate.length ? { ignoredFields: ignoredCreate } : {}) };
       }
       case 'patch_ao': {
         if (!['ao_edit', 'ao_complete', 'ao_material', 'ao_start_own', 'ao_complete_own', 'ao_pool_take'].some((x) => this.has(eff, x))) return DEFINITE(403, 'forbidden');
@@ -816,12 +898,15 @@ class FakeSupabase {
         if (i < 0) return DEFINITE(404, 'not_found');
         const ao = aos[i];
         if (b.expectedUpdatedAt && ao.updatedAt && b.expectedUpdatedAt !== ao.updatedAt) return DEFINITE(409, 'stale_write');
-        const pt = clone(b.patch); ['id', 'createdAt', 'updatedAt', 'deleted', 'deletedAt'].forEach((k) => delete pt[k]);
+        let pt = clone(b.patch); ['id', 'createdAt', 'updatedAt', 'deleted', 'deletedAt'].forEach((k) => delete pt[k]);
         const keys = Object.keys(pt);
         const only = (arr) => keys.every((k) => arr.includes(k));
         let ignored = [];
+        /* T4-A (B5, B1): skyddade fält prövas efter behörighetskontrollen i grenen (work_order_patch). */
+        const t4 = () => { const r = T4A.aoPatch(ao, pt, perms); if (r.ok) { pt = r.patch; ignored = ignored.concat(r.ignored); } return r; };
         if (this.has(eff, 'ao_edit')) {
           if (billingTouched(ao, pt)) return REGEL(403, 'forbidden', 'invoice_path_required');
+          { const r = t4(); if (!r.ok) return REGEL(403, 'forbidden', r.reason); }
           const hadStaff = aoStaffOf(ao).length > 0;
           Object.assign(ao, pt);
           if ('staff' in pt && !('poolOpen' in pt) && ao.status === 'pool' && aoStaffOf(ao).length > 0 && !hadStaff) ao.poolOpen = false;
@@ -830,6 +915,7 @@ class FakeSupabase {
           if (!(isAssigned(ao, me.id) || this.has(eff, 'ao_view_all'))) return REGEL(403, 'forbidden', 'not_assigned');
           if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
           if (!Array.isArray(pt.materials) || pt.materials.length > 500) return DEFINITE(400, 'missing_fields');
+          { const r = t4(); if (!r.ok) return REGEL(403, 'forbidden', r.reason); }
           const merged = this._materialMerge(ao.materials, pt.materials, me.id);
           if (!merged) return REGEL(403, 'forbidden', 'not_own_row');
           ao.materials = merged;
@@ -845,7 +931,7 @@ class FakeSupabase {
           else return DEFINITE(403, 'forbidden');
           if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
           if (!['nytt', 'planerad', 'pool', 'pågående'].includes(ao.status)) return REGEL(409, 'invalid_source_status');
-          ignored = ['completedAt', 'completedBy'].filter((k) => k in pt);
+          ignored = ignored.concat(['completedAt', 'completedBy'].filter((k) => k in pt));
           Object.assign(ao, { status: 'klar', completedAt: now, completedBy: me.id });
         } else if (pt.status === 'planerad' && 'staff' in pt && only(['staff', 'status', 'log'])) {
           // "Ta jobbet" i v3.4-klientens form: samma atomiska regel som take_from_pool.
@@ -1214,6 +1300,8 @@ class FakeSupabase {
     if (!this.canWriteAO(ao, perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
     if (!this.has(perms, 'ao_view_all') && isLockedAO(ao)) return REGEL(409, 'ao_locked');
     if (!String(b.path).startsWith(b.aoId + '/')) return DEFINITE(400, 'invalid_path');
+    /* T4-A: ägarkontroll — bild som annans post refererar raderas bara med ao_edit. */
+    if (!this.has(perms, 'ao_edit') && T4A.bildAnnans(ao, String(b.path), me && me.id)) return REGEL(403, 'forbidden', 'not_own');
     this.files.delete(b.path);
     return { status: 200, body: { ok: true } };
   }

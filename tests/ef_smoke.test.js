@@ -19,10 +19,11 @@ const EF = ['ao-time-write', 'work-orders-list', 'store-key-write', 'time-entrie
   const r = byggReplik({});
   // T3-B: hela repokedjan inklusive de nya migrationerna; deras objekt är förklarade via
   // tests/local/t3-andringar.json (md5-kontrollerade). STAGING-baslinjen: replica_build.test.js.
-  const t3n = Object.keys(require('./local/t3-andringar.json').objekt).length;
+  // T4-A: T4:s objekt registreras i t4-andringar.json; objekt som både T3 och T4 ändrar räknas en gång.
+  const t3n = new Set(Object.keys(require('./local/t3-andringar.json').objekt).concat(Object.keys(require('./local/t4-andringar.json').objekt))).size;
   // T3-C: vift_store_project(3 argument), tidigare "samma kod" bland de 7 kända, ersätts av en
   // registrerad T3-C-signatur → 6 kända + T3-objekten (samma −1 som i T3-B).
-  ok(r.rapport.oforklarade === 0 && r.rapport.forklarade === 6 + t3n - 1, 'replikan byggd (repokedjan med T3-B och T3-C): ' + r.rapport.identiska + ' identiska, ' + r.rapport.forklarade + ' förklarade (6 kända + T3-B/T3-C), 0 oförklarade mot STAGING-facit');
+  ok(r.rapport.oforklarade === 0 && r.rapport.forklarade === 6 + t3n - 1, 'replikan byggd (repokedjan med T3-B och T3-C): ' + r.rapport.identiska + ' identiska, ' + r.rapport.forklarade + ' förklarade (6 kända + T3-B–T3-E och T4-A), 0 oförklarade mot STAGING-facit');
   const U = r.U, db = r.db;
   const ef = await laddaEf(db, EF);
   ok(EF.every((s) => typeof ef.handlers[s] === 'function'), 'alla ' + EF.length + ' EF transpilerade och laddade (riktig källa ur supabase/functions)');

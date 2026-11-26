@@ -39,7 +39,10 @@ const registret = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't3-a
 const t3dEgna = Object.entries(registret).filter(([, v]) => (v.paket === 'T3-D' && !v.aven) || v.aven === 'T3-D').map(([k]) => k);
 
 ok(fs.readFileSync(t3dRb.UT, 'utf8') === t3dRb.sql(), 'rollback_t3d.sql är aktuell (genererad ur kedjan utan T3-D av tests/local/t3d-rollback.js)');
-const r = byggReplik({});
+/* T4-A: T3-rollbacken prövas på kedjan utan T4 (T4-A installeras ovanpå T3-E och rullas tillbaka
+   först, se t4a_skyddade_falt.test.js som prövar hela den omvända ordningen). */
+const T4_FILER = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
+const r = byggReplik({ utelamna: T4_FILER });
 const db = r.db;
 const U = r.U;
 try {

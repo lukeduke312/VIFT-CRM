@@ -37,7 +37,7 @@ const t3c = Object.entries(JSON.parse(fs.readFileSync(path.join(__dirname, 'loca
 // Här prövas T3-C för sig: kedjan utan T3-D-migrationerna. Steg 4 installerar T3-D igen ovanpå,
 // så att schemat kan jämföras med alla registrerade T3-ändringar (T3-D ändrar två T3-C-objekt).
 // T3-E (2026-11-28) bygger på T3-D och utesluts/installeras tillsammans med den.
-const T3D = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[de]_/.test(p[1] || '')).map((p) => p[1]);
+const T3D = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[de]_|_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
 
 ok(fs.readFileSync(t3cRb.UT, 'utf8') === t3cRb.sql(), 'rollback_t3c.sql är aktuell (genererad ur STAGING-facit av tests/local/t3c-rollback.js)');
 const r = byggReplik({ utelamna: T3D, schemakontroll: false });
@@ -81,8 +81,10 @@ try {
   let fel = null;
   try { nya.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
   ok(!fel && nya.length === 2, 'ny installation efter rollback: de 2 T3-C-migrationerna går igenom (STOP-kontrollerna godtar STAGING-versionen)', fel);
-  try { T3D.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
-  ok(!fel && T3D.length === 3, 'T3-D och T3-E (installeras efter T3-C) går igenom ovanpå den nya T3-C-installationen', fel);
+  // T4-A: kedjan byggs utan T4 (T3D innehåller även T4-filerna för uteslutningen); bara T3-D och T3-E installeras om här.
+  const T3DE = T3D.filter((rel) => /_t3[de]_/.test(rel));
+  try { T3DE.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
+  ok(!fel && T3DE.length === 3, 'T3-D och T3-E (installeras efter T3-C) går igenom ovanpå den nya T3-C-installationen', fel);
   const efterNy = jamfor(db, false);
   ok(oforklarade(efterNy) === 0 && !/OBS: T3-ändringar som inte syns/.test(efterNy.ut), 'ny installation: schemat = STAGING + alla registrerade T3-ändringar (0 oförklarade)');
   let stop = null;

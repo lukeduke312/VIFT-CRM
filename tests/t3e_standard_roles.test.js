@@ -42,7 +42,7 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   const EJV = Object.keys(DEF.ejVerkstallda);
 
   // ════════════════ BASLINJE: T3-D-koden (utan 20261128000008) ════════════════
-  const t3e = fs.readFileSync(path.join(serverRot(), 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3e_/.test(p[1] || '')).map((p) => p[1]);
+  const t3e = fs.readFileSync(path.join(serverRot(), 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3e_|_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
   {
     const rb = byggReplik({ utelamna: t3e, schemakontroll: false });
     const efB = await laddaEf(rb.db, ['store-key-write']);
@@ -126,8 +126,8 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
     if (d.length) neutral.push(id + ' utan ej verkställda: ' + d.join(','));
   }
   ok(neutral.length === 0, `ej verkställda behörigheter (${EJV.join(', ')}) är verkningslösa: varje enskild behörighet (och alla tillsammans) lagd till en tom roll, begransad och personal ger EXAKT samma effektiva åtkomst (EF-läsningar av 25 nycklar, work-orders-list, time-entries-list, REST, 23 skrivande anrop med status/error/reason/ändrade resurser); chef, ekonomi och personal med och utan dem är identiska — ingen roll får bredare åtkomst av en ej verkställd behörighet (rättat i 20261128000008)`, neutral);
-  ok(psql(db, `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname not in ('_vift_ej_verkstallda') and (${EJV.map((e) => `pg_get_functiondef(p.oid) like ${lit("%'" + e + "'%")}`).join(' or ')}) and p.proname <> '_vift_staff_external'`) === '0',
-    'ingen SQL-funktion i servern läser en ej verkställd behörighet (utom registret _vift_ej_verkstallda och _vift_staff_external, som räknar bort dem)');
+  ok(psql(db, `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind in ('f', 'p') and p.proname not in ('_vift_ej_verkstallda', '_vift_t4a_kontakt') and (${EJV.map((e) => `(case when p.prokind in ('f', 'p') then pg_get_functiondef(p.oid) end) like ${lit("%'" + e + "'%")}`).join(' or ')}) and p.proname <> '_vift_staff_external'`) === '0',
+    'ingen SQL-funktion i servern läser en ej verkställd behörighet (utom registret _vift_ej_verkstallda och _vift_staff_external/_vift_t4a_kontakt, som räknar bort dem i övergångsregeln)');
   const tsTraff = [];
   const fdir = path.join(serverRot(), 'functions');
   const gaIgenom = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((f) => { const p = path.join(d, f.name); if (f.isDirectory()) gaIgenom(p); else if (/\.ts$/.test(f.name)) { const t = fs.readFileSync(p, 'utf8'); EJV.forEach((e) => { if (t.includes("'" + e + "'") || t.includes('"' + e + '"')) tsTraff.push(path.relative(fdir, p) + ':' + e); }); } });
@@ -136,8 +136,13 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
 
   // ════════════════ SEC-CUST-01..23 ════════════════
   const lika = async (namn, a, b, beskr) => { const d = skillnad(await P(a), await P(b)); ok(d.length === 0, namn + ' — ' + beskr, d); };
-  await lika('SEC-CUST-01 (chef − cost_view)', std('chef'), EGNA.c01, 'VERKNINGSLÖS NU: cost_view verkställs i T4-A/B; chef med och utan den har exakt samma åtkomst (inköpspris/TB följer i dag ao_view_all/ao_edit, SEC-B1-12 i T4)');
-  await lika('SEC-CUST-02 (chef − cost_edit)', std('chef'), EGNA.c02, 'VERKNINGSLÖS NU: cost_edit verkställs i T4-A/B (artikelns buyPrice kräver i dag article_manage, 403 för båda)');
+  /* T4-A (2026-11-28): en verkställd behörighet ska ge EXAKT de beslutade skillnaderna och inget mer. */
+  const exakt = async (namn, a, b, forv, beskr) => { const d = skillnad(await P(a), await P(b)).sort(); ok(JSON.stringify(d) === JSON.stringify(forv.slice().sort()), namn + ' — ' + beskr, d); };
+  /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit är verkställda; raderna prövar
+     nu den beslutade åtkomsten exakt (tidigare "verkningslös nu"). */
+  await exakt('SEC-CUST-01 / SEC-B1-12 (chef − cost_view)', std('chef'), EGNA.c01, ['anrop:material_egen', 'las:vift_articles', 'las:vift_settings', 'rest:vift_articles', 'rest:vift_settings', 'wol'],
+    'VERKSTÄLLD (T4-A): utan cost_view saknas artiklarnas inköpspris/påslag, intern timkostnad och materialradernas inköpspris (E), och REST-raderna för artiklar och inställningar; profilens materialanrop (hela listan med lagrade inköpspriser, T3-klientens form) nekas med 403 field_protected (oläsbart fält skickat) — inget annat skiljer');
+  await lika('SEC-CUST-02 (chef − cost_edit)', std('chef'), EGNA.c02, 'VERKSTÄLLD (T4-A) för skyddade fält: chef saknar article_manage, så artikelns inköpspris nekas med och utan (403 forbidden); nya materialraders inköpspris ignoreras utan cost_edit (svarets ignoredFields) — prövat i t4a_skyddade_falt (SEC-B1-14)');
   // SEC-CUST-03: objects_sensitive verkställs i get-sensitive-fields och i projektionen för läsare (T3-D); skrivardelen är T4-A (SÄK-7).
   let a0 = audit();
   await NEJ('SEC-CUST-03 (chef − objects_sensitive): get-sensitive-fields → 403 "Forbidden: objects_sensitive required"', () => ef.anropa('get-sensitive-fields', { user: U.cust03, body: { objectId: 'OBJ-R1' } }), { status: 403, error: 'Forbidden: objects_sensitive required' }, { keys: ['vift_propertyObjects'] });
@@ -145,15 +150,16 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   a0 = audit();
   let s = await ef.anropa('get-sensitive-fields', { user: U.chef, body: { objectId: 'OBJ-R1' } });
   ok(s.status === 200 && audit() === a0 + 1, 'SEC-CUST-03 (+, D-05): standardrollen chef (objects_sensitive) får åtkomstinformationen, en revisionsrad allowed', s.body);
-  const kunder03 = await lasAlla(U.cust03, ['vift_propertyObjects']);
-  ok((kunder03.propertyObjects || []).some((o) => o.doorCode), 'SEC-CUST-03 (T4-A, känd begränsning SÄK-7): chef − objects_sensitive är skrivare (customer_manage) och får fortfarande portkoden i registret — kräver fältvis sammanslagning (T4-A); dokumenterat, inte godkänt som målregel');
+  const kunder03 = await lasAlla(U.cust03, ['vift_propertyObjects', 'vift_customers', 'vift_properties', 'vift_recurringOrders']);
+  ok((kunder03.propertyObjects || []).length > 0 && !JSON.stringify(kunder03).match(/doorCode|keyInformation|accessInformation|keyReceipt|alarmInformation|"accessCode"|keyInfo/),
+    'SEC-CUST-03 (T4-A, SÄK-7 stängd): chef − objects_sensitive är skrivare (customer_manage) men får INTE portkod eller nyckelinformation i registret (projektion även för skrivare, fältvis sammanslagning vid skrivning)');
   await NEJ('SEC-CUST-04 (chef − invoice_create): invoice-write → 403 forbidden', () => ef.anropa('invoice-write', { user: U.cust04, body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'L-C4', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } } }), FORB);
   await JA('SEC-CUST-04 (+, D-07): standardrollen chef (invoice_create) lägger till en rad i fakturaunderlaget', () => ef.anropa('invoice-write', { user: U.chef, body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'L-C4', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } } }), ['store:vift_invoices']);
   await lika('SEC-CUST-05 (chef − time_view_all)', std('chef'), EGNA.c05, 'VERKNINGSLÖS NU: time_view_all verkställs i T4-B (K-01: all personal); time-entries-list ger i dag bara egna tidposter med och utan den');
   await lika('SEC-CUST-06 (chef − export_data)', std('chef'), EGNA.c06, 'VERKNINGSLÖS NU på servern: export_data verkställs i T4-F (ingen serverexport finns; klientens export spärras inte av den, se VIFT-CRM)');
   await NEJ('SEC-CUST-07 (ekonomi − payroll_manage): attest_time → 403 forbidden', () => AW(U.cust07, { action: 'attest_time', entryId: 'TE-R2', attested: true }), FORB);
   await JA('SEC-CUST-07 (+, D-08): standardrollen ekonomi attesterar', () => AW(U.ekonomi, { action: 'attest_time', entryId: 'TE-R2', attested: true }), ['store:vift_timeEntries', 'tabell:op_idempotency']);
-  await lika('SEC-CUST-08 (ekonomi − personal_data_view)', std('ekonomi'), EGNA.c08, 'VERKNINGSLÖS NU: personal_data_view verkställs i T4-A (D-13); personnummer följer i dag kundregistrets läsare (C-5), med och utan den');
+  await exakt('SEC-CUST-08 (ekonomi − personal_data_view)', std('ekonomi'), EGNA.c08, ['las:vift_customers'], 'VERKSTÄLLD (T4-A, D-13): utan personal_data_view saknas personnummer och privatpersoners org.nr i kundregistret — inget annat skiljer');
   ok(!(await lista(U.cust09)).some((a) => a.status === 'pool'), 'SEC-CUST-09 (personal − ao_pool_take): ingen öppen pool i work-orders-list');
   await NEJ('SEC-CUST-09: personal − ao_pool_take tar P1 → 403 forbidden', () => AW(U.cust09, { action: 'take_from_pool', aoId: 'AO-P1' }), FORB);
   await NEJ('SEC-CUST-10 (personal − ao_complete_own): klarmarkera egen pågående AO-A2 → 403 forbidden', () => AW(U.cust10, { action: 'patch_ao', aoId: 'AO-A2', patch: { status: 'klar' } }), FORB);
@@ -178,25 +184,25 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   await NEJ('SEC-CUST-19 (endast admin_manage): lägga till all i standardrollen chef → 403 superadmin_required', () => MW(U.cust19, 'vift_roles', roEl('chef', { permissions: std('chef').concat(['all']) })), { status: 403, error: 'forbidden', reason: 'superadmin_required' });
   await NEJ('SEC-CUST-19: lägga till bankgiro_edit (som anroparen saknar) i begransad → 403 privilege_escalation', () => MW(U.cust19, 'vift_roles', roEl('begransad', { permissions: std('begransad').concat(['bankgiro_edit']) })), { status: 403, error: 'forbidden', reason: 'privilege_escalation' });
   await NEJ('SEC-CUST-19: ändra standardrollen admin (har all) → 403 superadmin_required', () => MW(U.cust19, 'vift_roles', roEl('admin', { label: 'x' })), { status: 403, error: 'forbidden', reason: 'superadmin_required' });
-  await lika('SEC-CUST-20 (ao_view_all + sales_manage, utan personal_data_view)', EGNA.c20, EGNA.c20.concat(['personal_data_view']), 'VERKNINGSLÖS NU: personnummer (D-13) är T4-A; med och utan personal_data_view samma');
+  await exakt('SEC-CUST-20 (ao_view_all + sales_manage, utan personal_data_view)', EGNA.c20, EGNA.c20.concat(['personal_data_view']), ['las:vift_customers'], 'VERKSTÄLLD (T4-A, D-13): bara kundregistrets personnummer skiljer');
   const k20 = await lasAlla(U.cust20, ['vift_customers']);
-  ok((k20.customers || []).some((c) => c.personnr), 'SEC-CUST-20 (T4-A, dokumenterat): kundregistrets läsare får i dag personnumret (C-5) — inte godkänt som målregel, verkställs i T4-A');
+  ok((k20.customers || []).length > 0 && !(k20.customers || []).some((c) => c.personnr) && !(k20.customers || []).some((c) => ['privat', 'private', 'privatperson'].includes(String(c.type).toLowerCase()) && 'orgNr' in c),
+    'SEC-CUST-20 / SEC-KUND-03 (T4-A): kundregistrets läsare utan personal_data_view får inte personnummer eller privatpersoners org.nr');
   const t3 = val(db, 'vift_activities').find((y) => y.id === 'TASK-R3');
   await NEJ('SEC-CUST-21 (ao_view_all utan ao_edit): ändra annans uppgift → 403 forbidden/not_own', () => MW(U.cust21, 'vift_activities', Object.assign({}, t3, { title: 'x' }), t3), { status: 403, error: 'forbidden', reason: 'not_own' });
   for (const [n, u] of [['22 (tom behörighetslista)', U.cust22], ['23 (roll som saknas i registret)', U.cust23]]) {
     const w = await ef.anropa('work-orders-list', { user: u });
     const tl = await ef.anropa('time-entries-list', { user: u });
     const ra = await SK(u, { action: 'readAllWithHashes', keys: T.LAS });
-    /* Kända, oförändrade C-5-utlämningar till alla inloggade (inte T3-E; dokumenterade som öppna):
-       projicerade inställningar (bara icke-skyddade fält, R56), prisgruppernas namn och timpris
-       (SEC-B2-01, T4-B) och återkommande ärenden utan accessCode (inget urval per post, T3-D-begränsning). */
-    const KANDA = ['settings', 'priceGroups', 'recurringOrders'];
+    /* T4-A (punkt 7): de tidigare kända C-5-utlämningarna (inställningar, prisgrupper med timpris,
+       återkommande ärenden) till en roll utan giltiga behörigheter är stängda — inga undantag kvar. */
+    const KANDA = [];
     const d22 = ra.body.data || {};
-    const tomt = Object.entries(d22).filter(([k, v]) => !['staff', 'roles', 'articles', 'notifications', 'lastChanged'].concat(KANDA).includes(k) && (Array.isArray(v) ? v.length : v && Object.keys(v).length));
+    const tomt = Object.entries(d22).filter(([k, v]) => !['staff', 'roles', 'lastChanged'].concat(KANDA).includes(k) && (Array.isArray(v) ? v.length : v && Object.keys(v).length));
     ok(w.status === 200 && (w.body.workOrders || []).length === 0 && [200, 403].includes(tl.status) && ((tl.body.entries || tl.body.timeEntries || []).length === 0) && ra.status === 200 && tomt.length === 0 && ids(d22.staff) === u.staffId,
       `SEC-CUST-${n}: work-orders-list, time-entries-list och readAllWithHashes ger tomma listor (bara den egna personalposten) — fail-closed, utom de kända C-5-nycklarna`, [w.status, tl.status, tomt.map((y) => y[0])]);
-    ok(!('bankgiro' in (d22.settings || {})) && !('internalHourlyCost' in (d22.settings || {})) && (d22.recurringOrders || []).every((x) => !('accessCode' in x)),
-      `SEC-CUST-${n} (känd, öppen): inställningar utan bankgiro och intern timkostnad, återkommande ärenden utan accessCode — men återkommande ärenden och prisgrupper lämnas ut till alla inloggade (C-5; urval per post och timpris i T4) — dokumenterat, inte godkänt som målregel`, Object.keys(d22.settings || {}));
+    ok(Object.keys(d22.settings || {}).length === 0 && (d22.recurringOrders || []).length === 0 && (d22.priceGroups || []).length === 0 && (d22.articles || []).length === 0,
+      `SEC-CUST-${n} (T4-A, punkt 7 stängd): inga inställningar, återkommande ärenden, prisgrupper eller artiklar till en roll utan giltiga behörigheter`, Object.keys(d22).filter((k) => JSON.stringify(d22[k]).length > 2));
     await NEJ(`SEC-CUST-${n}: ao-time-write patch → 403 forbidden`, () => AW(u, { action: 'patch_ao', aoId: 'AO-A1', patch: { status: 'klar' } }), FORB);
     await NEJ(`SEC-CUST-${n}: invoice-write → 403 forbidden`, () => ef.anropa('invoice-write', { user: u, body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'L-22', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } } }), FORB);
   }

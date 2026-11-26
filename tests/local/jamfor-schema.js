@@ -28,6 +28,12 @@ const kanda = JSON.parse(fs.readFileSync(path.join(__dirname, 'kanda-avvikelser.
    tests/local/t3-andringar.js. */
 const t3Fil = path.join(__dirname, 't3-andringar.json');
 const t3 = (fs.existsSync(t3Fil) && !process.env.T3_IGNORERA) ? JSON.parse(fs.readFileSync(t3Fil, 'utf8')).objekt : {};
+/* T4-A (2026-11-28): T4:s ändringar registreras separat i t4-andringar.json (relativt läget efter
+   T3-E), så att T3-registret är oförändrat och en kedja utan T4 fortfarande jämförs exakt. Ett
+   objekt som både T3 och T4 ändrar godtas med T4:s md5 när T4 är installerad, annars med T3:s.
+   T4_IGNORERA=1 (eller T3_IGNORERA=1) jämför utan T4-registret. */
+const t4Fil = path.join(__dirname, 't4-andringar.json');
+const t4 = (fs.existsSync(t4Fil) && !process.env.T3_IGNORERA && !process.env.T4_IGNORERA) ? JSON.parse(fs.readFileSync(t4Fil, 'utf8')).objekt : {};
 const md5 = (x) => require('crypto').createHash('md5').update(String(x == null ? '' : x)).digest('hex');
 
 const q = (sql) => JSON.parse(execFileSync('psql', ['-d', DB, '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', `select coalesce(json_agg(t), '[]') from (${sql}) t`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim());
@@ -84,6 +90,10 @@ const lokalDef = (typ, key) => {
 const add = (typ, key, status, detalj) => {
   let k = kanda[typ + ':' + key];
   const t = t3[typ + ':' + key];
+  const t4e = t4[typ + ':' + key];
+  if (!k && t4e && status !== 'IDENTISK' && status !== 'SAMMA KOD' && t4e.md5 === lokalDef(typ, key)) {
+    k = t4e.paket + ' (' + t4e.andring + ', ej installerad i STAGING): ' + t4e.beskrivning;
+  }
   if (!k && t && status !== 'IDENTISK' && status !== 'SAMMA KOD') {
     const nu = lokalDef(typ, key);
     if (t.md5 === nu) k = t.paket + ' (' + t.andring + ', ej installerad i STAGING): ' + t.beskrivning;
@@ -176,6 +186,8 @@ for (const r of res.filter((x) => x.kategori !== 'IDENTISK')) {
 }
 const t3Ej = Object.keys(t3).filter((k) => !res.find((r) => r.typ + ':' + r.key === k && r.kategori === 'FÖRKLARAD'));
 if (t3Ej.length && !process.env.T3_UTAN) console.log('OBS: T3-ändringar som inte syns i databasen (ej installerade här?):', t3Ej.join(', '));
+const t4Ej = Object.keys(t4).filter((k) => !res.find((r) => r.typ + ':' + r.key === k && r.kategori === 'FÖRKLARAD'));
+if (t4Ej.length && !process.env.T3_UTAN) console.log('OBS: T4-ändringar som inte syns i databasen (ej installerade här?):', t4Ej.join(', '));
 const ej = Object.keys(kanda).filter((k) => !res.find((r) => r.typ + ':' + r.key === k && r.kategori === 'FÖRKLARAD'));
 if (ej.length) console.log('OBS: förklaringar som inte längre behövs (objektet är identiskt eller finns inte):', ej.join(', '));
 if (OUT) fs.writeFileSync(OUT, JSON.stringify(res, null, 1));

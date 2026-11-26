@@ -1,0 +1,179 @@
+{
+ "beskrivning": "T4-A (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E. Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
+ "objekt": {
+  "funktion:_vift_auth_staff(p_auth uuid)": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-B)",
+   "md5": "2ae5d090a55ffcb723d3870a16d2410c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-A: inaktiverad roll ger inga behörigheter (stämpling)."
+  },
+  "funktion:_vift_ej_verkstallda()": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-E)",
+   "md5": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-E + T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda och borttagna ur registret."
+  },
+  "funktion:_vift_role_perms(p_roles jsonb, p_role_id text)": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-C)",
+   "md5": "c0f44dae78dbdc5e6270e072adb492e7|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-C + T4-A: inaktiverad roll ger inga behörigheter."
+  },
+  "funktion:_vift_t4a_aktor_perms(p_actor text)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "32546ac289c7bae2727ff0c8dfa7a5ae|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Anroparens behörigheter lästa i RPC:ns transaktion (samma regel som checkViftAuth)."
+  },
+  "funktion:_vift_t4a_alla_lasbara(p_key text, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "85e9b4cfcf30d28d682107d44bf83203|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hela värdet bara om alla skyddade fält i nyckeln får läsas (C-5 regel 1 ersatt)."
+  },
+  "funktion:_vift_t4a_ao_patch(p_ao jsonb, p_patch jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "1fe7901978201c301175d6c4f22315da|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Fältvis kontroll i work_order_patch: accessCode och materials[].buyPrice under radlås."
+  },
+  "funktion:_vift_t4a_ao_ref(p_perms text[], p_staff_id text, p_falt text)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "f4df17997c42c5c793445e493e07e430|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "AO-referenser (återkommande, projekt, avvikelser) för AO som anroparen ser med innehåll."
+  },
+  "funktion:_vift_t4a_falt(p_key text)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "69bc6bf07122faa11ce9d67ace605109|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Katalogen över skyddade fält per nyckel (portkod, personnummer, inköpspris, intern timkostnad, bankgiro)."
+  },
+  "funktion:_vift_t4a_giltig(p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "546408457907dd8c66181aff30282490|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Minst en verkställd behörighet ur katalogen; annars inga verksamhetsdata (tom, okänd, inaktiverad roll)."
+  },
+  "funktion:_vift_t4a_kan_lasa(p_key text, p_falt text, p_e jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "1a6a50491b3bf5807a4f3b5881abbc9f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Läsrätt per skyddat fält (objects_sensitive, personal_data_view, cost_view, interna roller för bankgiro)."
+  },
+  "funktion:_vift_t4a_kan_skriva(p_key text, p_falt text, p_e jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "fe0d4144d4be360f2e1ddf22c290fae5|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Skrivrätt per skyddat fält (objects_sensitive, personal_data_view, cost_edit, bankgiro_edit)."
+  },
+  "funktion:_vift_t4a_kontakt(p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "fb26da8cae27a9183a43250b21bff979|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Arbetskontakt till kollegor: staff_contacts_view (övergång: T3-E:s härledning med fast lista)."
+  },
+  "funktion:_vift_t4a_legacy(p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "d3507711f743688002ab8eaf9918b3ad|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Övergångsregel: roll utan staff_contacts_view och activity_log_view_all behandlas som före T4."
+  },
+  "funktion:_vift_t4a_logg_full(p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "3104bc210ccea1a8cbac9dca1a7ac0d8|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hela aktivitetsloggen: activity_log_view_all (övergång: ao_view_all/admin_manage som T3-D)."
+  },
+  "funktion:_vift_t4a_privat(p_e jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "8ce96995fa17277af2ba452fe20b6de9|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: kunden är privatperson."
+  },
+  "funktion:_vift_t4a_projicera_elem(p_key text, p_e jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "f3b7874d8099a874c98ca24c9ab13bad|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Elementet utan de fält anroparen inte får läsa."
+  },
+  "funktion:_vift_t4a_roll_aktiv(p_role jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "1ca5c0e41179a77902902b7934520f10|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Inaktiverad roll (active false/0) ger inga behörigheter (beslutets punkt 7)."
+  },
+  "funktion:_vift_t4a_roller_bevara(p_old jsonb, p_new jsonb, p_klient jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "97acb32b95f35aba79bf61fb226e1222|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Äldre klient utan katalogmarkör tappar inga behörigheter utanför v3.4-katalogen."
+  },
+  "funktion:_vift_t4a_sammanfoga(p_key text, p_old jsonb, p_new jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "f5b3189ed821149656f478e778d11580|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Fältvis sammanslagning av ett element: saknat skyddat fält bevaras, skickat nekas (field_protected)."
+  },
+  "funktion:_vift_t4a_sammanfoga_lista(p_key text, p_old jsonb, p_new jsonb, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "ae432f635a04b6f8919d35b33c5542f6|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Fältvis sammanslagning av hela listan (store_business_key_write)."
+  },
+  "funktion:_vift_t4a_tom(p_v jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "78ab59db85b0b00a3826de8c97ee1a75|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: tomt värde (null eller tom sträng)."
+  },
+  "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text)": {
+   "paket": "T4-A",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-A: ny parameter p_klient; projicerad jämförelse av previous, fältvis sammanslagning, vift_settings fält för fält (D-17), bevarade behörigheter. 5-parametersversionen ersatt."
+  },
+  "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text, p_klient jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "1e3f1a8b115fdca16bf5b1f7aac95cab|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-A: ny parameter p_klient; projicerad jämförelse av previous, fältvis sammanslagning, vift_settings fält för fält (D-17), bevarade behörigheter. 5-parametersversionen ersatt."
+  },
+  "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text)": {
+   "paket": "T4-A",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T4-A: ny parameter p_klient; fältvis sammanslagning av skyddade fält och bevarade behörigheter för äldre klient. 5-parametersversionen ersatt."
+  },
+  "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text, p_klient jsonb)": {
+   "paket": "T4-A",
+   "andring": "NY",
+   "md5": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-A: ny parameter p_klient; fältvis sammanslagning av skyddade fält och bevarade behörigheter för äldre klient. 5-parametersversionen ersatt."
+  },
+  "funktion:vift_caller_perms()": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD",
+   "md5": "ca74ba216330b26f0e5a99f8c3517ec8|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-A: inaktiverad roll ger inga behörigheter (RLS)."
+  },
+  "funktion:vift_store_full_access(p_key text, p_perms text[])": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-D)",
+   "md5": "429030d2146ea1997687c83213598ca4|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A: hela värdet bara med läsrätt till alla skyddade fält (även skrivare), giltig behörighet, activity_log_view_all, urval per post för återkommande/projekt/avvikelser/inspektioner."
+  },
+  "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-D)",
+   "md5": "654d0db82ba49f00d7dabba5720c2342|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A: skyddade fält projiceras även för skrivare; staff_contacts_view; aktivitetslogg utan activity_log_view_all; urval per post för återkommande/projekt/avvikelser/inspektioner; inga data utan giltig behörighet."
+  },
+  "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-A",
+   "andring": "ÄNDRAD (efter T3-B)",
+   "md5": "52a5e9a4e5995f9929f04743d6e866b6|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-A: accessCode och materials[].buyPrice prövas fältvis under radlåset (field_protected, ignoredFields)."
+  }
+ }
+}

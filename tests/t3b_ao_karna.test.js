@@ -396,18 +396,22 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   await NEJ('bilduppladdning på egen fakturerad AO-A9 → 409 ao_locked', () => bild(U.falt, 'AO-A9'), { status: 409, error: 'ao_locked', reason: null });
   await JA('arbetsledare (ao_view_all) bockar av checklista på valfri AO → 200', () => chk(U.chef, 'AO-A8', 'AO-A8-C1', 'done'), ['store:vift_workOrders']);
   // Materialrader: fältet ändrar inte andras rader (D-19 delvis).
-  const m1 = ao('AO-A1').materials;
+  /* T4-A (2026-11-28): fältet läser materialraderna utan inköpspris (cost_view saknas) och T4-klienten skickar
+     dem så; raderna skickas därför i fältets vy (fv). Den äldre formen med inköpspris prövas i
+     t4a_skyddade_falt.test.js (403 field_protected; inköpspriset bevaras). */
+  const fv = (l) => l.map((m) => { const x = Object.assign({}, m); delete x.buyPrice; return x; });
+  const m1 = fv(ao('AO-A1').materials);
   await NEJ('SEC-B1-05: ändra annans/äldre rad (A1-M1) → 403 forbidden/not_own_row', () => mat(U.falt, 'AO-A1', [Object.assign({}, m1[0], { qty: 99 })]), { status: 403, error: 'forbidden', reason: 'not_own_row' });
   await NEJ('SEC-B1-05: ta bort annans/äldre rad → 403 not_own_row', () => mat(U.falt, 'AO-A1', []), { status: 403, error: 'forbidden', reason: 'not_own_row' });
   await JA('SEC-B1-01: lägg till egen rad (befintliga orörda) → 200', () => mat(U.falt, 'AO-A1', m1.concat([{ id: 'M-EGEN', name: 'Fritext', qty: 2, unit: 'st' }])), ['store:vift_workOrders', 'tabell:op_idempotency']);
   const egen = ao('AO-A1').materials.find((m) => m.id === 'M-EGEN');
   ok(egen && egen.addedBy === F && egen.addedAt, 'servern sätter addedBy/addedAt på den nya raden');
-  await JA('SEC-B1-04: ändra egen rad → 200', () => mat(U.falt, 'AO-A1', ao('AO-A1').materials.map((m) => m.id === 'M-EGEN' ? Object.assign({}, m, { qty: 3 }) : m)), ['store:vift_workOrders', 'tabell:op_idempotency']);
-  await JA('SEC-B1-04: ta bort egen rad → 200', () => mat(U.falt, 'AO-A1', ao('AO-A1').materials.filter((m) => m.id !== 'M-EGEN')), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  await JA('SEC-B1-04: ändra egen rad → 200', () => mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).map((m) => m.id === 'M-EGEN' ? Object.assign({}, m, { qty: 3 }) : m)), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  await JA('SEC-B1-04: ta bort egen rad → 200', () => mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).filter((m) => m.id !== 'M-EGEN')), ['store:vift_workOrders', 'tabell:op_idempotency']);
   psql(db, `update public.store set value = (select jsonb_agg(case when e->>'id' = 'AO-A1' then e || '{"staff":["${F}","${F2}"]}'::jsonb else e end) from jsonb_array_elements(value) e) where key = 'vift_workOrders'`);
-  await mat(U.falt, 'AO-A1', ao('AO-A1').materials.concat([{ id: 'M-FA', name: 'Fs rad', qty: 1 }]));
-  await NEJ('FÄ2 ändrar FÄ:s rad på gemensam AO → 403 not_own_row', () => mat(U.falt2, 'AO-A1', ao('AO-A1').materials.map((m) => m.id === 'M-FA' ? Object.assign({}, m, { qty: 5 }) : m)), { status: 403, error: 'forbidden', reason: 'not_own_row' });
-  await JA('FÄ2 lägger till egen rad på gemensam AO och lämnar FÄ:s rad orörd → 200', () => mat(U.falt2, 'AO-A1', ao('AO-A1').materials.concat([{ id: 'M-F2', name: 'F2:s rad', qty: 1 }])), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  await mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).concat([{ id: 'M-FA', name: 'Fs rad', qty: 1 }]));
+  await NEJ('FÄ2 ändrar FÄ:s rad på gemensam AO → 403 not_own_row', () => mat(U.falt2, 'AO-A1', fv(ao('AO-A1').materials).map((m) => m.id === 'M-FA' ? Object.assign({}, m, { qty: 5 }) : m)), { status: 403, error: 'forbidden', reason: 'not_own_row' });
+  await JA('FÄ2 lägger till egen rad på gemensam AO och lämnar FÄ:s rad orörd → 200', () => mat(U.falt2, 'AO-A1', fv(ao('AO-A1').materials).concat([{ id: 'M-F2', name: 'F2:s rad', qty: 1 }])), ['store:vift_workOrders', 'tabell:op_idempotency']);
 
   // ════════════════ Punkt 245: AO-nummer ════════════════
   aterstall();

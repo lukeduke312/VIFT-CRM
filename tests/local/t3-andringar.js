@@ -106,7 +106,11 @@ const T3D_EJ = new Set(['vift_store_project(p_key text, p_value jsonb, p_perms t
 const T3D_AVEN_T3C = new Set(['vift_store_full_access(p_key text, p_perms text[])', 'vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)']);
 const ws = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
 
-const r = byggReplik({ data: false, schemakontroll: false });
+/* T4-A: T3-registret beskriver läget efter T3-E; T4:s migrationer (som kräver T3-E) utesluts här och
+   registreras i t4-andringar.json (tests/local/t4-andringar.js). */
+const T4_FILER = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
+  .filter((p) => /^\d{14}$/.test(p[0]) && /_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
+const r = byggReplik({ data: false, schemakontroll: false, utelamna: T4_FILER });
 try {
   const ut = path.join(os.tmpdir(), 't3-andringar-' + process.pid + '.json');
   try { execFileSync('node', [path.join(__dirname, 'jamfor-schema.js'), r.db, ut], { env: Object.assign({}, process.env, { T3_IGNORERA: '1' }), stdio: 'pipe' }); } catch (e) { /* avvikelser ger exit 1 */ }
@@ -144,7 +148,7 @@ try {
   /* T3-E: md5 i T3-D-läget (kedjan utan T3-E) för objekt som T3-D och T3-E båda ändrar. */
   const avenD = Object.keys(objekt).filter((k) => objekt[k].aven === 'T3-D');
   if (avenD.length) {
-    const rd = byggReplik({ data: false, schemakontroll: false, utelamna: paketRel(/_t3e_/) });
+    const rd = byggReplik({ data: false, schemakontroll: false, utelamna: paketRel(/_t3e_|_t4[a-z]_/) });
     try {
       const lokD = q(rd.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl
         from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p')`);
@@ -157,7 +161,7 @@ try {
   }
   const aven = Object.keys(objekt).filter((k) => objekt[k].aven === 'T3-C');
   if (aven.length) {
-    const t3dRel = paketRel(/_t3[de]_/);
+    const t3dRel = paketRel(/_t3[de]_|_t4[a-z]_/);
     const rc = byggReplik({ data: false, schemakontroll: false, utelamna: t3dRel });
     try {
       const lokC = q(rc.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl

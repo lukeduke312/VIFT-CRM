@@ -200,11 +200,20 @@ const sorterad = (a) => Array.from(new Set(a || [])).sort().join(',');
     e2e_arbetsledare: {
       'las:vift_customers': 'objects_sensitive (D-05): kundens portkod/nyckelinformation', 'las:vift_properties': 'objects_sensitive (D-05)', 'las:vift_propertyObjects': 'objects_sensitive (D-05)',
       'rest:vift_customers': 'objects_sensitive (D-05): REST-läsning av register med portkoder', 'rest:vift_properties': 'objects_sensitive (D-05)', 'rest:vift_propertyObjects': 'objects_sensitive (D-05)',
-      'las:vift_recurringOrders': 'objects_sensitive (D-05): accessCode', 'rest:vift_recurringOrders': 'objects_sensitive (D-05): REST-läsning av återkommande ärenden med accessCode', 'wol': 'objects_sensitive (D-05): AO:ns accessCode', 'anrop:portkod_objekt': 'objects_sensitive (D-05): get-sensitive-fields',
+      'las:vift_recurringOrders': 'objects_sensitive (D-05): accessCode', 'rest:vift_recurringOrders': 'objects_sensitive (D-05): REST-läsning av återkommande ärenden med accessCode', 'wol': 'objects_sensitive (D-05): AO:ns accessCode; cost_view (D-01, T4-A): materialradernas inköpspris', 'anrop:portkod_objekt': 'objects_sensitive (D-05): get-sensitive-fields',
       'las:vift_invoices': 'invoice_view (D-07)', 'rest:vift_invoices': 'invoice_view (D-07)', 'las:vift_contracts': 'invoice_view (D-07)', 'rest:vift_contracts': 'invoice_view (D-07)',
       'anrop:faktura_rad': 'invoice_create (D-07)', 'las:vift_offers': 'invoice_view (D-07): offerter till fakturering', 'las:vift_activityLog': 'invoice_view (D-07)',
+      /* T4-A (2026-11-28): cost_view verkställd (D-01) — intern timkostnad, artiklarnas inköpspris/påslag
+         och materialradernas inköpspris (work-orders-list, därför även 'wol'). */
+      'las:vift_settings': 'cost_view (D-01, T4-A): intern timkostnad', 'rest:vift_settings': 'cost_view (D-01, T4-A): REST-läsning av inställningar med intern timkostnad',
+      'las:vift_articles': 'cost_view (D-01, T4-A): inköpspris och påslag', 'rest:vift_articles': 'cost_view (D-01, T4-A): REST-läsning av artiklar med inköpspris',
+      'anrop:material_egen': 'cost_view/cost_edit (D-01, T4-A): profilens materialanrop skickar hela listan med lagrade inköpspriser (T3-klientens form); utan cost_view 403 field_protected (oläsbart fält), med standardrollen 200 — T4-klienten skickar raderna utan inköpspris',
     },
-    e2e_ekonomi: { 'tel': 'payroll_view (D-08): alla tidposter', 'anrop:tid_egen': 'payroll_manage (D-08): fortfarande 403 forbidden, men orsaken blir not_assigned (lönehandläggaren passerar behörighetssteget, tilldelningen nekar) — ingen breddning', 'anrop:tid_pool': 'payroll_manage (D-08): som tid_egen, 403 not_assigned', 'anrop:attest': 'payroll_manage (D-08): attest', 'las:vift_timeEntries': 'payroll_view (D-08)', 'rest:vift_timeEntries': 'payroll_view (D-08)' },
+    e2e_ekonomi: { /* T4-A: personal_data_view (D-13) och cost_view (D-01) verkställda. */
+      'las:vift_customers': 'personal_data_view (D-13, T4-A): personnummer och privatpersoners org.nr (ROT/RUT)', 'las:vift_settings': 'cost_view (D-01, T4-A): intern timkostnad',
+      'rest:vift_settings': 'cost_view (D-01, T4-A)', 'las:vift_articles': 'cost_view (D-01, T4-A): inköpspris och påslag', 'rest:vift_articles': 'cost_view (D-01, T4-A)',
+      'wol': 'cost_view (D-01, T4-A): materialradernas inköpspris',
+      'tel': 'payroll_view (D-08): alla tidposter', 'anrop:tid_egen': 'payroll_manage (D-08): fortfarande 403 forbidden, men orsaken blir not_assigned (lönehandläggaren passerar behörighetssteget, tilldelningen nekar) — ingen breddning', 'anrop:tid_pool': 'payroll_manage (D-08): som tid_egen, 403 not_assigned', 'anrop:attest': 'payroll_manage (D-08): attest', 'las:vift_timeEntries': 'payroll_view (D-08)', 'rest:vift_timeEntries': 'payroll_view (D-08)' },
     e2e_falt: {},
     e2e_begransad: {},
   };

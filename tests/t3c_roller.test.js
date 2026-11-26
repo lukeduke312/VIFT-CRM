@@ -406,7 +406,7 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
   ok(!x.error && val(db, 'vift_customers').some((c) => c.id === 'CU-T3C'), 'F18: RPC-vägen (SECURITY DEFINER) och därmed alla Edge Functions skriver som tidigare', x.error);
 
   // ════════════════ SEC-REST-03/04: RPC-grants (inklusive T3-B:s nya signaturer) ════════════════
-  const RPC_EF = ['work_order_patch(text,jsonb,text,text,text,text[])', 'store_business_key_write(text,jsonb,text,boolean,text)', 'store_business_key_merge_write(text,jsonb,jsonb,boolean,text)',
+  const RPC_EF = ['work_order_patch(text,jsonb,text,text,text,text[])', /* T4-A: signaturerna har p_klient */ 'store_business_key_write(text,jsonb,text,boolean,text,jsonb)', 'store_business_key_merge_write(text,jsonb,jsonb,boolean,text,jsonb)',
     'sensitive_fields_write(text,text,jsonb,uuid,text)', 'time_entry_create(jsonb,text,text,text,uuid,text[])', 'work_order_pool_take(text,text,text[],text,text)', 'work_order_billing_set(text,text,text,text)',
     'deactivate_vift_user(uuid)', 'provision_vift_user(uuid,text,text,boolean)', 'vift_store_project(text,jsonb,text[],text)', 'store_read_all_with_hashes_projected(text[],text[],text)', '_vift_authz_check(text,jsonb,jsonb,jsonb,jsonb,text)', '_vift_superadmin_lock()'];
   const grantFel = RPC_EF.filter((f) => { const y = q(db, `select has_function_privilege('authenticated', 'public.${f}', 'EXECUTE') a, has_function_privilege('anon', 'public.${f}', 'EXECUTE') b, has_function_privilege('service_role', 'public.${f}', 'EXECUTE') c`)[0]; return y.a || y.b || !y.c; });
@@ -436,7 +436,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 
   r.stang();
   avsluta();
-})().catch((e) => { console.log('FAIL krasch: ' + (e && e.stack || e)); avsluta(); });
+/* T4-A: en krasch räknas som fel (tidigare skrevs bara "FAIL krasch" och testet avslutades med 0 fel). */
+})().catch((e) => { ok(false, 'krasch: ' + (e && e.stack || e)); avsluta(); });
 
 /* app_users-raden är aktiv (hjälp). */
 function one1(db, authId) { return q(db, `select active from public.app_users where user_id = ${lit(authId)}`)[0].active === true; }

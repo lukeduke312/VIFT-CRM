@@ -35,7 +35,10 @@ const extern = (db, perms) => psql(db, `select public._vift_staff_external(array
 ok(fs.readFileSync(t3eRb.UT, 'utf8') === t3eRb.sql(), 'rollback_t3e.sql är aktuell (genererad ur kedjan utan T3-E av tests/local/t3e-rollback.js)');
 ok(t3eEgna.length === 2 && t3eEgna.includes('funktion:_vift_ej_verkstallda()') && registret['funktion:_vift_staff_external(p_perms text[])'].aven === 'T3-D',
   't3-andringar.json: två T3-E-objekt (_vift_ej_verkstallda ny, _vift_staff_external ändrad igen med T3-D-läget registrerat)', t3eEgna);
-const r = byggReplik({});
+/* T4-A: T3-rollbacken prövas på kedjan utan T4 (T4-A installeras ovanpå T3-E och rullas tillbaka
+   först, se t4a_skyddade_falt.test.js som prövar hela den omvända ordningen). */
+const T4_FILER = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
+const r = byggReplik({ utelamna: T4_FILER });
 const db = r.db;
 try {
   ok(r.rapport.oforklarade === 0, 'hela kedjan (STAGING + T3-B–T3-E): 0 oförklarade');
@@ -68,7 +71,7 @@ try {
   ok(stop && /T3-E STOP: _vift_staff_external avviker från T3-D-versionen/.test(stop) && q(db, `select 1 from pg_proc where proname = '_vift_ej_verkstallda'`).length === 0, 'STOP-kontroll: en _vift_staff_external som avviker från T3-D-versionen stoppar installationen (inget ändrat)', stop);
 } catch (e) { ok(false, 'oväntat fel: ' + e.message); }
 // 5. Omvänd ordning i en ny replik → exakt STAGING.
-const r2 = byggReplik({ schemakontroll: false });
+const r2 = byggReplik({ utelamna: T4_FILER, schemakontroll: false });
 try {
   const KS2 = { keys: ['vift_roles', 'vift_staff', 'vift_workOrders'], tables: ['app_users'] };
   const fore2 = ksTa(r2.db, KS2);

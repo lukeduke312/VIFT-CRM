@@ -30,7 +30,7 @@ function lasForeDefinitioner() {
   if (!process.env.PGUSER) process.env.PGUSER = 'postgres';
   const { byggReplik, serverRot } = require('./lib/replik');
   const { q } = require('./lib/db');
-  const r = byggReplik({ utelamna: paketFiler(serverRot(), /_t3e_/), data: false, schemakontroll: false });
+  const r = byggReplik({ utelamna: paketFiler(serverRot(), /_t3e_|_t4[a-z]_/), data: false, schemakontroll: false });
   try {
     const ut = {};
     for (const sig of ERSATTA) ut[sig] = q(r.db, `select pg_get_functiondef('public.${sig}'::regprocedure) as def, coalesce((select proacl::text from pg_proc where oid = 'public.${sig}'::regprocedure), 'NULL') as acl`)[0];

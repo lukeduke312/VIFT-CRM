@@ -176,8 +176,13 @@ function laddaVarld(r) {
   ok(restTab.falt === '000000000' && restTab.begransad === '000000000' && restTab.tom === '000000000',
     'SEC-KUND-02 / SEC-B4-02 / SEC-TASK-04 (R): REST-läsning ger tom lista för fält, begränsad och tom roll för alla nio nycklarna', restTab);
   // Ordning: activities, activityLog, properties, propertyContacts, customers, propertyObjects, offers, staff, invoices.
-  ok(restTab.ekonomi === '010100001' && restTab.saljare === '010100001' && restTab.chef === '111111101',
-    'REST (R): ekonomi och säljare (ao_view_all, utan objects_sensitive) läser loggen, kontakter och fakturor men inte andras uppgifter eller register med portkoder (kunder, fastigheter, objekt) eller personalregistret; arbetsledaren allt utom personalregistret (staff_view räcker inte, T3-C)', restTab);
+  /* T4-A (2026-11-28): hela värdet (och REST) bara med läsrätt till alla skyddade fält: kontakter kräver
+     objects_sensitive (de kan bära portkod) och kunder dessutom personal_data_view (D-13) — även för
+     skrivaren customer_manage. Ekonomi och säljare tappar därför REST-läsningen av kontakter och
+     arbetsledaren (utan personal_data_view) av kunder; projektionen via store-key-write är oförändrad
+     för fälten de får läsa. Tidigare förväntan: ekonomi/säljare '010100001', arbetsledaren '111111101'. */
+  ok(restTab.ekonomi === '010000001' && restTab.saljare === '010000001' && restTab.chef === '111101101',
+    'REST (R): ekonomi och säljare (ao_view_all, utan objects_sensitive) läser loggen och fakturor men inte andras uppgifter, kontakter eller register med portkoder (kunder, fastigheter, objekt) eller personalregistret; arbetsledaren allt utom kunder (personal_data_view saknas, T4-A) och personalregistret (staff_view räcker inte, T3-C)', restTab);
 
   // ════════════════ Ingen breddning: före (T3-C) jämfört med efter (T3-D) per roll ════════════════
   const delmangd = (efter, fore) => {
@@ -205,9 +210,17 @@ function laddaVarld(r) {
     }
     const wF = await efFore.anropa('work-orders-list', { user: U[a] }), wE = await ef.anropa('work-orders-list', { user: U[a] });
     jamforda++;
-    if (JSON.stringify(wF.body) !== JSON.stringify(wE.body)) bredare.push(a + ':work-orders-list');
+    /* T4-A (2026-11-28): work-orders-list smalnar av (portkod bara med objects_sensitive även för ao_edit,
+       inköpspris bara med cost_view, AO-ekonomi inte till fält). Samma AO lämnas ut; varje AO är en
+       delmängd av den tidigare (tidigare krävdes identiskt svar). */
+    const aoDel = (e, f) => !!f && Object.keys(e).every((k) => (k === 'materials' && Array.isArray(e[k]))
+      ? e[k].every((m) => !m || typeof m !== 'object' || delmangd([m], f[k] || []))
+      : JSON.stringify(e[k]) === JSON.stringify(f[k]));
+    if (JSON.stringify((wF.body.workOrders || []).map((x) => x.id)) !== JSON.stringify((wE.body.workOrders || []).map((x) => x.id))
+        || !(wE.body.workOrders || []).every((x) => aoDel(x, (wF.body.workOrders || []).find((y) => y.id === x.id))))
+      bredare.push(a + ':work-orders-list');
   }
-  ok(bredare.length === 0 && jamforda > 150, `ingen breddning (L6, AP-A): för ${ANV.length} användare (alla standardroller och egna roller) och ${jamforda} nycklar/svar är utlämningen efter T3-D en delmängd av utlämningen med T3-C-koden (${T3C_COMMIT}) på samma data; work-orders-list oförändrad`, bredare);
+  ok(bredare.length === 0 && jamforda > 150, `ingen breddning (L6, AP-A): för ${ANV.length} användare (alla standardroller och egna roller) och ${jamforda} nycklar/svar är utlämningen efter T3-D (och T4-A) en delmängd av utlämningen med T3-C-koden (${T3C_COMMIT}) på samma data; work-orders-list samma AO, varje AO och materialrad en delmängd`, bredare);
   const smalare = ANV.filter((a) => ['falt', 'falt2', 'begransad', 'ekonomi'].includes(a));
   ok(smalare.length === 4, 'jämförelsen omfattar fältet, begränsad och ekonomi (där T3-D smalnar av)');
 

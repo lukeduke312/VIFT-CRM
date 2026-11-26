@@ -13,7 +13,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { ok, krav, avsluta } = require('./local/lib/test');
 krav();
-const { byggReplik } = require('./local/lib/replik');
+const { byggReplik, serverRot } = require('./local/lib/replik');
 const { q, val, asUser } = require('./local/lib/db');
 const facit = require('./local/staging-schema-facit-2026-11-25.json');
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
@@ -98,7 +98,11 @@ r.stang();
 // ── T3-B/T3-C/T3-D: hela repokedjan (STAGING + nya migrationer) = STAGING-facit + exakt de
 //    registrerade T3-ändringarna (tests/local/t3-andringar.json, md5-kontrollerade). ──
 const t3 = require('./local/t3-andringar.json').objekt;
-const rt = byggReplik({ data: false });
+const t4 = require('./local/t4-andringar.json').objekt;
+/* T4-A: T3-registret prövas på kedjan UTAN T4 (läget efter T3-E); hela kedjan prövas nedan. */
+const T4_FILER = fs.readFileSync(path.join(serverRot(), 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
+  .filter((p) => /^\d{14}$/.test(p[0]) && /_t4[a-z]_/.test(p[1] || '')).map((p) => p[1]);
+const rt = byggReplik({ data: false, utelamna: T4_FILER });
 try {
   const nya = rt.steg.filter((x) => x.ny).map((x) => x.rel);
   ok(nya.length === 8 && nya.slice(0, 3).every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)) && nya.slice(3, 5).every((x) => /^migrations\/20261128\d{6}_t3c_/.test(x))
@@ -115,4 +119,22 @@ try {
   const t3sec = q(rt.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_%' or p.proname in ('work_order_pool_take','work_order_billing_set','_store_direct_write_guard','vift_store_project','store_read_all_with_hashes_projected','store_business_key_write','store_business_key_merge_write','deactivate_vift_user','provision_vift_user','activity_log_append')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
   ok(t3sec.length === 0, 'T3-B/T3-C/T3-D/T3-E: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
 } finally { rt.stang(); }
+
+// ── T4-A: hela repokedjan = STAGING-facit + T3-registret + exakt de registrerade T4-ändringarna
+//    (tests/local/t4-andringar.json, md5-kontrollerade, relativt läget efter T3-E). ──
+const rt4 = byggReplik({ data: false });
+try {
+  const nya = rt4.steg.filter((x) => x.ny).map((x) => x.rel);
+  ok(nya.length === 9 && /^migrations\/20261128000009_t4a_/.test(nya[8]), 'repokedjan: T4-A-migrationen (20261128000009) efter T3-E (' + nya.slice(8).join(', ') + ')');
+  ok(rt4.rapport.oforklarade === 0, `hela repokedjan (T3-B–T3-E + T4-A) mot STAGING-facit: ${rt4.rapport.identiska} identiska, ${rt4.rapport.forklarade} förklarade, 0 oförklarade`);
+  const t4Forklarade = (rt4.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T4-A /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  ok(JSON.stringify(t4Forklarade) === JSON.stringify(Object.keys(t4).sort()), `varje T4-A-objekt (${Object.keys(t4).length}) syns i kedjan med registrerad md5, och inga andra avvikelser`, t4Forklarade.length);
+  const t3Kvar = (rt4.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-[BCDE] /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  const t3Ovrigt = Object.keys(t3).filter((k) => !t4[k]).sort();
+  ok(JSON.stringify(t3Kvar) === JSON.stringify(t3Ovrigt), `T3-objekt som T4-A inte rör (${t3Ovrigt.length}) har oförändrad T3-md5 i hela kedjan; ${Object.keys(t3).length - t3Ovrigt.length} ändras av T4-A`, t3Kvar.length);
+  const t4sec = q(rt4.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_t4a\\_%' or p.proname in ('vift_store_project','store_business_key_write','store_business_key_merge_write','work_order_patch','_vift_role_perms','_vift_auth_staff','_vift_ej_verkstallda')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
+  ok(t4sec.length === 0, 'T4-A: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role; RLS-hjälparna vift_store_full_access och vift_caller_perms som förut)', t4sec);
+  const hj = q(rt4.db, `select p.proname as name from pg_proc p where p.proname in ('vift_store_full_access','vift_caller_perms') and has_function_privilege('authenticated', p.oid, 'execute') and not has_function_privilege('anon', p.oid, 'execute')`);
+  ok(hj.length === 2, 'T4-A: RLS-hjälparna vift_store_full_access och vift_caller_perms körbara för authenticated (inte anon), som före T4-A');
+} finally { rt4.stang(); }
 avsluta();
