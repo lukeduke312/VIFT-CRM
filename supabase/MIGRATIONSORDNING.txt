@@ -94,3 +94,8 @@ REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.
 #    Material, priser och tid: radvisa material-RPC:er, serverpris, okänt ≠ 0, fastpris utan dubbeldebitering,
 #    fakturerade källrader låsta, time_view_all, tidlås på klar AO + time_entry_correct, VK-1-arkitekturen.
 20261128000011  migrations/20261128000011_t4b_material_priser_tid.sql
+# ── T4-C (2026-11-28): NY – EJ INSTALLERAD I STAGING (klass "ny" i MIG-1). Installeras efter T4-B
+#    (20261128000011); rollback FÖRE T4-B:s (supabase/rollback/T4-C/). Åtkomstinformation till tilldelad
+#    personal (objects_access_assigned, SÄK-7 vägen, D-05), D-23 (permanent radering tar bort den känsliga
+#    raden). D-16 (jämförelse, bara läsning) är ett manuellt skript: supabase/manual/t4c_d16_jamforelse/.
+20261128000012  migrations/20261128000012_t4c_atkomstinformation.sql

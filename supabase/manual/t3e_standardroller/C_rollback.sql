@@ -1,6 +1,6 @@
 -- =====================================================================
 -- VIFT CRM — T3-E standardroller (M9, D-02): C. Rollback av en journalförd ändring med expectedHash (KRÄVER GO)
--- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4b-2026-11-28). Ändra inte för hand.
+-- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4c-2026-11-28). Ändra inte för hand.
 -- Körs i Supabase SQL Editor för STAGING (yyzljlqyzzcbxmcdbual) FÖRST efter separat GO.
 -- ALDRIG mot LIVE utan en egen LIVE-plan. Ingår INTE i migrationskedjan (inte db push).
 -- Återställer rollregistrets förevärde för EN journalrad (från B eller D), i omvänd ordning.
