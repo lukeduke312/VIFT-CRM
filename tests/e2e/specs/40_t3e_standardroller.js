@@ -52,9 +52,11 @@ module.exports = [
       });
       t.note(JSON.stringify(ed.markta));
       t.assert(ed.ikryssade.join() === (await s.eval(() => state.roles.find((r) => r.id === 'chef').permissions.slice().sort().join())), 'rolleditorn kryssar exakt standardrollen chefs behörigheter');
-      t.assert(['cost_view=verkställs i T4-A/T4-B', 'time_view_all=verkställs i T4-B', 'export_data=verkställs i T4-F', 'ao_plan_own=verkställs i AO-etappen', 'rondering_utfor=verkställs i T4-D'].every((x) => ed.markta.includes(x)) && ed.markta.length === 10,
-        'de tio ej verkställda behörigheterna är märkta med paketet: ' + ed.markta.join(', '));
-      t.assert(['customer_view', 'personal_data_view', 'bankgiro_edit', 'export_personal_data', 'objects_access_assigned'].every((p) => ed.rutor.includes(p)), 'katalogen innehåller även customer_view, personal_data_view, bankgiro_edit, export_personal_data och objects_access_assigned');
+      /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit är verkställda och inte längre märkta. */
+      t.assert(['time_view_all=verkställs i T4-B', 'export_data=verkställs i T4-F', 'ao_plan_own=verkställs i AO-etappen', 'rondering_utfor=verkställs i T4-D', 'objects_access_assigned=verkställs i T4-C', 'export_personal_data=verkställs i T4-F'].every((x) => ed.markta.includes(x)) && ed.markta.length === 6
+        && !ed.markta.some((x) => /^(cost_view|cost_edit|personal_data_view|bankgiro_edit)=/.test(x)),
+        'de sex ej verkställda behörigheterna är märkta med paketet (cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda i T4-A): ' + ed.markta.join(', '));
+      t.assert(['customer_view', 'personal_data_view', 'bankgiro_edit', 'export_personal_data', 'objects_access_assigned', 'staff_contacts_view', 'activity_log_view_all'].every((p) => ed.rutor.includes(p)), 'katalogen innehåller även customer_view, personal_data_view, bankgiro_edit, export_personal_data, objects_access_assigned och (T4-A) staff_contacts_view och activity_log_view_all');
       // En roll med en behörighet som inte finns i katalogen: visas och sparas utan förlust.
       const roles = t.fake.get('roles'); roles.push({ id: 'egen_okand', label: 'Egen med okänd', isBuiltin: false, active: true, permissions: ['dashboard_view', 'framtida_behorighet'] }); t.fake.set('roles', roles);
       await s.eval(() => Auth.refreshAuthorization && Auth.refreshAuthorization());
@@ -69,15 +71,15 @@ module.exports = [
     },
   },
   {
-    id: 'T3E-02', world: WORLD, module: 'Säkerhet', name: 'Standardrollen chef (Arbetsledare): arbetsorder, kunder, offerter, fakturaunderlag (D-07), personal (läsa), inte löner, rapporter eller admin; ser alla AO och lägger rad i fakturaunderlag',
+    id: 'T3E-02', world: WORLD, module: 'Säkerhet', name: 'Standardrollen chef (Arbetsledare): arbetsorder, kunder, offerter, fakturaunderlag (D-07), personal (läsa), rapporter (T3-E 5), inte löner eller admin; ser alla AO och lägger rad i fakturaunderlag',
     async run(t) {
       const s = await t.world.session({ viewport: 'laptop' });
       await s.login('chef');
       await s.settle(800);
       const m = await meny(s);
       t.note(m.sidor.join(','));
-      t.assert(har(m.sidor, ['pg-ao', 'pg-crm', 'pg-offer', 'pg-invoices', 'pg-sales', 'pg-recurring', 'pg-staff', 'pg-tid', 'pg-rondering', 'pg-calendar']).length === 0, 'chef når arbetsorder, kunder, offerter, fakturaunderlag, säljchanser, återkommande, personal, tid, rondering och kalender');
-      t.assert(saknar(m.sidor, ['pg-payroll', 'pg-reports', 'pg-admin', 'pg-articles']).length === 0, 'chef når inte löner (payroll_view), rapporter (reports_view finns inte i matrisen för chef), admin eller artiklar');
+      t.assert(har(m.sidor, ['pg-ao', 'pg-crm', 'pg-offer', 'pg-invoices', 'pg-sales', 'pg-recurring', 'pg-staff', 'pg-tid', 'pg-rondering', 'pg-calendar', 'pg-reports']).length === 0, 'chef når arbetsorder, kunder, offerter, fakturaunderlag, säljchanser, återkommande, personal, tid, rondering, kalender och (matrisändring T3-E 5, T4-A) rapporter');
+      t.assert(saknar(m.sidor, ['pg-payroll', 'pg-admin', 'pg-articles']).length === 0, 'chef når inte löner (payroll_view), admin eller artiklar');
       t.assert(m.nav.every((p) => m.sidor.includes(p)), 'menyn visar bara sidor som chef får se');
       await s.go('pg-ao');
       await s.settle(600);

@@ -73,7 +73,7 @@ const sre = new RegExp(`(role(_id|Id)?|\\.role|->>'role')\\s*(===|!==|==|!=|=|<>
 for (const f of filerI(path.join(SROT, 'functions'), /\.ts$/)) fs.readFileSync(f, 'utf8').split('\n').forEach((l, i) => { if (!arKommentar(l) && sre.test(l)) serverTraff.push(path.relative(SROT, f) + ':' + (i + 1) + ' ' + l.trim()); });
 const nya = fs.readFileSync(path.join(SROT, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && p[0] > '20261124211128').map((p) => p[1]);
 for (const rel of nya) fs.readFileSync(path.join(SROT, rel), 'utf8').split('\n').forEach((l, i) => { if (!arKommentar(l) && sre.test(l)) serverTraff.push(rel + ':' + (i + 1) + ' ' + l.trim()); });
-ok(nya.length === 8 && serverTraff.length === 0, 'servern (auktoritativ källa): inga säkerhetsbeslut på rollnamn i Edge Functions eller i de 8 T3-migrationerna', serverTraff);
+ok(nya.length >= 9 && nya.filter((x) => /_t3[a-e]_/.test(x)).length === 8 && nya.some((x) => /_t4a_/.test(x)) && serverTraff.length === 0, 'servern (auktoritativ källa): inga säkerhetsbeslut på rollnamn i Edge Functions eller i de 8 T3-migrationerna och T4-migrationerna (' + nya.length + ')', serverTraff);
 
 // ════════════════ 2. Ej verkställda behörigheter ════════════════
 const ps = fs.readFileSync(path.join(ROOT, 'src/pages/PageShells.js'), 'utf8');
@@ -98,16 +98,18 @@ for (const f of filerI(path.join(ROOT, 'src'), /\.js$/)) {
   });
 }
 ok(ejvAnv.length === 0, 'klienten använder ingen ej verkställd behörighet utanför rolleditorns katalog och demorollerna — ingen vy, meny eller knapp visas som om den fungerade', ejvAnv);
-ok(!/Auth\.can(Any)?\(\s*\[?\s*['"](cost_view|cost_edit|time_view_all|bankgiro_edit|personal_data_view|export_data|export_personal_data|rondering_utfor|ao_plan_own|objects_access_assigned)/.test(filerI(path.join(ROOT, 'src'), /\.js$/).map((f) => fs.readFileSync(f, 'utf8')).join('\n')), 'inget Auth.can/canAny på en ej verkställd behörighet');
+/* T4-A: listan följer registret (cost_view, cost_edit, personal_data_view, bankgiro_edit är verkställda och får användas). */
+ok(!new RegExp(`Auth\\.can(Any)?\\(\\s*\\[?\\s*['"](${EJV.join('|')})`).test(filerI(path.join(ROOT, 'src'), /\.js$/).map((f) => fs.readFileSync(f, 'utf8')).join('\n')), 'inget Auth.can/canAny på en ej verkställd behörighet');
 
 // ════════════════ 3. Katalogen ════════════════
 const katalog = ps.slice(katStart, katSlut);
 const grupper = (() => { const m = /_PERM_GROUPS:\s*\[([\s\S]*?)\n\s*\],/.exec(katalog); return m ? Array.from(m[1].matchAll(/'([a-z_]+)'/g)).map((x) => x[1]) : []; })();
 const etiketter = (() => { const m = /_PERM_LABELS:\s*\{([\s\S]*?)\n\s*\},/.exec(katalog); return m ? Object.fromEntries(Array.from(m[1].matchAll(/'([a-z_]+)':\s*'([^']+)'/g)).map((x) => [x[1], x[2]])) : {}; })();
 const allaStd = Array.from(new Set(DEF.roller.flatMap((r) => r.permissions)));
-const MATRIS_NYA = ['cost_view', 'cost_edit', 'ao_start_own', 'ao_complete_own', 'ao_pool_take', 'ao_plan_own', 'rondering_utfor', 'objects_access_assigned', 'export_data', 'export_personal_data', 'personal_data_view', 'time_view_all', 'bankgiro_edit'];
+const MATRIS_NYA = ['cost_view', 'cost_edit', 'ao_start_own', 'ao_complete_own', 'ao_pool_take', 'ao_plan_own', 'rondering_utfor', 'objects_access_assigned', 'export_data', 'export_personal_data', 'personal_data_view', 'time_view_all', 'bankgiro_edit',
+  /* T4-A */ 'staff_contacts_view', 'activity_log_view_all'];
 const saknas = Array.from(new Set(allaStd.concat(MATRIS_NYA).concat(['staff_manage', 'admin_manage', 'article_manage']))).filter((p) => !grupper.includes(p) || !etiketter[p]);
-ok(saknas.length === 0 && new Set(grupper).size === grupper.length, 'rolleditorns katalog innehåller alla behörigheter i standardrollerna och matrisens §1.1 (13 nya) med beskrivning, utan dubbletter', saknas);
+ok(saknas.length === 0 && new Set(grupper).size === grupper.length, 'rolleditorns katalog innehåller alla behörigheter i standardrollerna och matrisens §1.1 (13 nya) med beskrivning, utan dubbletter (T4-A: även staff_contacts_view och activity_log_view_all)', saknas);
 ok(/data-ej-verkstalld/.test(ps) && /verkställs i \$\{esc\(ejV\[pid\]\)\}/.test(ps), 'rolleditorn märker ej verkställda behörigheter "verkställs i <paket>"');
 ok(/const okanda = perms\.filter\(pid => !kanda\.has\(pid\)\)/.test(ps), 'rolleditorn visar behörigheter som inte finns i katalogen i en egen grupp (de försvinner inte tyst vid Spara)');
 
