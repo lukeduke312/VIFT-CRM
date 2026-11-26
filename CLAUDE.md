@@ -187,7 +187,9 @@ Roller definieras i Supabase-datan (inte hårdkodade). Varje roll har `permissio
 
 ## Edge Functions (Supabase)
 
-Alla EF:er körs mot produktionsprojektet `hjplzjsbbowiyoyhdghc`. Deploys via `supabase functions deploy <namn>`.
+**Auktoritativ serverkod:** `vift-v2/supabase/` (repot `vift-v2`, gren `claude/vift-system-restructure-8fUme`) är serverns enda auktoritativa kodbas: Edge Functions i `supabase/functions/`, migrationer i `supabase/migrations/`, manuella skript i `supabase/manual/`, rollback i `supabase/rollback/`, STAGING-specifikt i `supabase/staging-only/` (följer aldrig med till LIVE). Detta klientrepo innehåller ingen serverkod (KÄLLA-1, BESLUT-2026-11-28); klientens tester läser servern via `VIFT_SERVER_ROOT`.
+
+EF:er installeras per miljö (STAGING `yyzljlqyzzcbxmcdbual`, produktion `hjplzjsbbowiyoyhdghc`) bara enligt godkänd installationsplan; deploy till produktion kräver Lucas uttryckliga godkännande (se ovan). Tabellen nedan är ett urval, inte en fullständig lista — se `vift-v2/supabase/functions/`.
 
 | Funktion | verify_jwt | Syfte |
 |---|---|---|
@@ -204,7 +206,7 @@ Autentisering i interna EF:er (kräver inloggning): `checkViftAuth()` i `_shared
 
 `service-monitor` autentiseras via `X-Monitor-Secret`-header (Supabase Vault, Model B).
 
-**OBS**: I detta workspace (`lukeduke312/VIFT-CRM`, branch `claude/vift-system-restructure-8fUme`) finns **bara** `supabase/functions/send-push/`. Övriga EF:er finns i staging-repot eller i en annan workspace-instans.
+**OBS**: Alla EF:er, inklusive `send-push`, finns i `vift-v2/supabase/functions/`. Detta klientrepo har ingen `supabase/functions/`.
 
 ---
 
@@ -219,7 +221,9 @@ Autentisering i interna EF:er (kräver inloggning): `checkViftAuth()` i `_shared
 
 ### Migreringar
 
-Migreringar ligger i `supabase/migrations/` och körs med `supabase db push`. Ordningen:
+Migreringar ligger i `vift-v2/supabase/migrations/`. Installationsordningen är `vift-v2/supabase/MIGRATIONSORDNING.txt` och mappningen mot installerade versioner `vift-v2/supabase/MIGRATIONSMAPPNING.md` (MIG-1). **Ingen generell `supabase db push` och ingen `migration repair` mot STAGING eller LIVE** — installerade migrationer har delvis andra versionsnummer än repots filer. Varje migration installeras enligt godkänd installationsplan, en i taget, med STOP-kontroll, backup och rollback (`vift-v2/supabase/rollback/`).
+
+De äldsta migrationerna (historisk översikt):
 
 | Migration | Innehåll |
 |---|---|
@@ -233,9 +237,9 @@ Migreringar ligger i `supabase/migrations/` och körs med `supabase db push`. Or
 | `20260720000007` | Strippning av lösenord från store-blob |
 | `20260720000008` | *(reserverat / tom)* |
 
-Cron-setup för `service-monitor` körs manuellt: `supabase/manual/setup_service_monitor_cron.sql` i SQL Editor (kräver explicit godkännande av Lucas).
+Cron-setup för `service-monitor` körs manuellt: `vift-v2/supabase/manual/setup_service_monitor_cron.sql` i SQL Editor (kräver explicit godkännande av Lucas).
 
-**OBS**: `supabase/migrations/`-mappen finns **inte** i detta workspace. Ovanstående är dokumenterat från brief och tidigare sessionsarbete.
+**OBS**: `supabase/migrations/` finns bara i `vift-v2`, inte i detta klientrepo.
 
 ---
 
@@ -283,7 +287,7 @@ Offerter, fakturaunderlag-detalj, kundkort-detalj, ronderingsrapport, artiklar, 
 | `src/services/ImportExportService.js` | CSV/XLSX-parser och -writer (rent JS) |
 | `index.html` | Entry point — alla script-taggar med versionsnummer |
 | `sw.js` | Service Worker v10 (network-first, cache-busting) |
-| `supabase/functions/send-push/index.ts` | Push-notiser EF (enda EF i detta workspace) |
+| `vift-v2/supabase/functions/` | Alla Edge Functions (auktoritativ serverkod, inte i detta repo) |
 | `docs/MASTERPLAN.md` | Spårning av alla planerade och genomförda funktioner |
 
 ---
