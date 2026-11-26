@@ -719,6 +719,31 @@ const Storage = {
     }
   },
 
+  /* T4-A, tilläggsdel notiser (punkt 275, beslutets punkt 7): notiser skrivs bara via
+     store-key-write. Servern sätter avsändare, tid och id, prövar mottagare, typ och referens
+     och projicerar läsningen per mottagare. Direkt REST-skrivning av vift_notifications och
+     vift_lastChanged är stängd. Returnerar {ok, data} eller {ok:false, error, reason, status}. */
+  async _notisAnrop(body) {
+    try {
+      const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
+        body: JSON.stringify(body),
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        timeoutMs: this.WRITE_TIMEOUT_MS
+      });
+      const data = await res.json().catch(function() { return {}; });
+      if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), reason: (data && data.reason) || null, status: res.status };
+      return { ok: true, data: data };
+    } catch (e) {
+      return { ok: false, error: e.isAuthExpired ? 'auth_expired' : 'network_error' };
+    }
+  },
+  appendNotification(notification, requestId) {
+    return this._notisAnrop({ action: 'appendNotification', requestId: requestId, notification: notification });
+  },
+  markNotificationsRead(ids) {
+    return this._notisAnrop(ids === 'all' ? { action: 'markNotificationsRead', all: true } : { action: 'markNotificationsRead', ids: ids });
+  },
+
   async writeBusinessKey(key, value, expectedHash) {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {

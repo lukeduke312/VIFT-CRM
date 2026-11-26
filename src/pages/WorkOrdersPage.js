@@ -2948,25 +2948,33 @@ const WorkOrdersPage = {
       _syncOps.push({ id: ao.id, patch: { staff: ao.staff, status: ao.status, log: ao.log, updatedAt: ao.updatedAt } });
     });
     if (updated > 0) {
+      /* V45 + T4-A notiser (AP-D, punkt 7): in-app-notis och Web Push bara för AO som
+         faktiskt fick ny personal (assignments) OCH som servern bekräftat (bulkPatch →
+         succeeded) — aldrig för skipped/unchanged, personal som redan fanns eller en
+         tilldelning som servern nekat. Notisen skapas av servern (appendNotification), som
+         själv prövar att mottagaren är tilldelad AO:n. EN PushService-anrop per AO.
+         Fire-and-forget — notis-/push-fel påverkar inte bulkresultatet. */
+      const self = this;
+      const notifiera = (okIds) => {
+        assignments.forEach(({ ao, added }) => {
+          if (okIds.indexOf(ao.id) === -1) return;
+          if (typeof NotificationsService !== 'undefined') {
+            added.forEach(id => {
+              NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${ao.id}: ${ao.title || ao.id}`, { aoId: ao.id });
+            });
+          }
+          if (typeof PushService !== 'undefined') {
+            PushService.notifyStaffAssigned(ao, added).catch(e => console.warn('[WorkOrdersPage] notifyStaffAssigned fel:', e));
+          }
+        });
+      };
       if (typeof AOTimeSyncService !== 'undefined' && _syncOps.length > 0) {
-        AOTimeSyncService.bulkPatch('ao', _syncOps).then(res => this._reportBulkRejections(res)).catch(e => console.warn('[WorkOrdersPage] _bulkAddStaff sync-fel:', e));
+        AOTimeSyncService.bulkPatch('ao', _syncOps).then(res => {
+          self._reportBulkRejections(res);
+          notifiera((res && Array.isArray(res.succeeded)) ? res.succeeded : []);
+        }).catch(e => console.warn('[WorkOrdersPage] _bulkAddStaff sync-fel:', e));
       }
       persist(); Sidebar.updateBadges(); this.render();
-      /* V45: in-app-notis + riktig Web Push, bara för AO som faktiskt fick
-         ny personal (assignments) — aldrig för skipped/unchanged eller
-         personal som redan fanns. EN PushService-anrop per AO (inte per
-         person). Fire-and-forget — push-fel får inte påverka bulkresultatet
-         ovan (redan returnerat/beräknat). */
-      assignments.forEach(({ ao, added }) => {
-        if (typeof NotificationsService !== 'undefined') {
-          added.forEach(id => {
-            NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${ao.id}: ${ao.title || ao.id}`, { aoId: ao.id });
-          });
-        }
-        if (typeof PushService !== 'undefined') {
-          PushService.notifyStaffAssigned(ao, added).catch(e => console.warn('[WorkOrdersPage] notifyStaffAssigned fel:', e));
-        }
-      });
     }
     return { ok: true, updated, skipped, unchanged };
   },

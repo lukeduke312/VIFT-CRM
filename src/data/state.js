@@ -2115,52 +2115,11 @@ async function _doPersistDetailed(_owner) {
   }
 }
 
-/* Spara bara notiser — anropas av NotificationsService.
-   Serialiserad via _notifPersistQueue — aldrig parallella read/write-flöden.
-   Använder Storage.getRemoteStrict() — ingen localStorage-fallback vid nätverksfel. */
-var _notifPersistQueue = Promise.resolve();
-
-function persistNotifs() {
-  _notifPersistQueue = _notifPersistQueue
-    .then(function() { return _doNotifPersist(); })
-    .catch(function(e) { console.warn('[persistNotifs] queue-fel:', e); });
-}
-
-async function _doNotifPersist() {
-  const now = new Date().toISOString();
-  var result;
-  try {
-    result = await Storage.getRemoteStrict('notifications');
-  } catch(e) {
-    console.warn('[persistNotifs] remote-läsning misslyckades — skriver inte:', e);
-    return;
-  }
-  var toWrite;
-  if (result.found && Array.isArray(result.value)) {
-    /* Giltig remote-array: merge (lokal read-status vinner, nya EF-notiser bevaras) */
-    const localMap = new Map((state.notifications || []).map(function(n) { return [n.id, n]; }));
-    const merged = (state.notifications || []).slice();
-    for (var i = 0; i < result.value.length; i++) {
-      if (!localMap.has(result.value[i].id)) merged.push(result.value[i]);
-    }
-    merged.sort(function(a, b) { return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(); });
-    toWrite = merged.slice(0, 5000);
-    state.notifications = toWrite;
-  } else if (result.found) {
-    /* Oväntat format — skriv INTE för att inte radera data */
-    console.warn('[persistNotifs] oväntat format — skriver inte:', typeof result.value);
-    return;
-  } else {
-    /* Ingen rad finns — skriv lokal array som startvärde */
-    toWrite = state.notifications || [];
-  }
-  try {
-    await Storage.setRemoteStrict([['notifications', toWrite], ['lastChanged', now]]);
-    if (typeof DataSync !== 'undefined') DataSync._lastSig = now;
-  } catch(e) {
-    console.warn('[persistNotifs] remote-skrivning misslyckades:', e);
-  }
-}
+/* T4-A, tilläggsdel notiser (punkt 275): persistNotifs() — som läste HELA vift_notifications via
+   REST och skrev tillbaka listan tillsammans med vift_lastChanged i en direkt REST-upsert — är
+   borttagen. Notiser skapas och markeras lästa via store-key-write (NotificationsService →
+   Storage.appendNotification / Storage.markNotificationsRead), och servern sätter
+   vift_lastChanged. Klienten gör inga direkta REST-skrivningar till store längre. */
 
 /* ── P0-1 FIX (2026-10-18, independent-reviewer regression) ──────────
  * reconcilePendingAoTime(canonicalArr, previousArr, entityType)
