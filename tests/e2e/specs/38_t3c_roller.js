@@ -230,7 +230,7 @@ module.exports = [
     },
   },
   {
-    id: 'T3C-07', module: 'Säkerhet', name: 'F18 (SEC-REST-01/02, klient): direkt REST-skrivning av affärsnycklar och okända nycklar nekas med 42501 direct_write_blocked; klientens notisväg (vitlistan) fungerar som tidigare',
+    id: 'T3C-07', module: 'Säkerhet', name: 'F18 (SEC-REST-01/02, klient): direkt REST-skrivning av affärsnycklar och okända nycklar nekas med 42501 direct_write_blocked; T4-A notiser: vitlistan avvecklad (notiser + lastChanged nekas), notisvägen går via servern',
     async run(t) {
       const s = await t.world.session({ viewport: 'laptop' });
       await s.login('falt');
@@ -244,9 +244,14 @@ module.exports = [
       t.note(JSON.stringify(r));
       t.assert(['kunder', 'personal', 'okand', 'radera'].every((k) => r[k].status === 403 && r[k].code === '42501'), 'alla nekas med 403 42501 (direct_write_blocked)');
       t.assert(JSON.stringify([t.fake.get('customers'), t.fake.get('staff')]) === k0 && t.fake.get('e2e_t3c') === undefined, 'inga data ändrade, ingen ny nyckel');
-      await s.eval(() => NotificationsService.push('ST-004', 'info', 'T3C-07 syntetisk notis'));
-      await s.settle(1500);
-      t.assert((t.fake.get('notifications') || []).some((n) => /T3C-07/.test(n.message || '')), 'klientens notisväg (persistNotifs: notiser + lastChanged i samma upsert) fungerar');
+      /* T4-A notiser (punkt 275): REST-vitlistan är avvecklad. Notiser går via store-key-write och en
+         notis åt annan med okänd typ nekas av servern (NOTIF-02–06 prövar den säkra vägen). */
+      const n0 = JSON.stringify(t.fake.get('notifications'));
+      const rn = await s.eval(async () => { const x = await fetch(SUPABASE_URL + '/rest/v1/store', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify([{ key: 'vift_notifications', value: [] }, { key: 'vift_lastChanged', value: 'x' }]) }); let d = {}; try { d = await x.json(); } catch (e) {} return { status: x.status, code: d.code }; });
+      t.assert(rn.status === 403 && rn.code === '42501', 'REST-skrivning av vift_notifications + vift_lastChanged nekas (403 42501, vitlistan avvecklad)');
+      const a = await s.eval(() => NotificationsService.push('ST-004', 'info', 'T3C-07 syntetisk notis'));
+      await s.settle(800);
+      t.assert(a && a.ok === false && a.reason === 'type_not_allowed' && JSON.stringify(t.fake.get('notifications')) === n0, 'klientens notisväg går via servern: notis åt annan med okänd typ nekas (type_not_allowed), inget sparat');
     },
   },
 ];

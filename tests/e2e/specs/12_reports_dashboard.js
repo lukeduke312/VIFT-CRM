@@ -64,7 +64,10 @@ module.exports = [
     async run(t) {
       const s = await t.world.session({ viewport: 'laptop' });
       await s.login('falt');
-      await s.eval(() => NotificationsService.push(state.currentUser.id, 'ao_assigned', 'E2E-notis: ny AO tilldelad', { aoId: 'AO-015' }));
+      /* T4-A notiser: notisen skapas av servern (appendNotification). Fältpersonal får skapa egna
+         påminnelser åt sig själv; en tilldelningsnotis kräver ao_edit och verklig tilldelning (NOTIF-02). */
+      const r = await s.eval(() => NotificationsService.push(state.currentUser.id, 'service_done', 'E2E-notis: ny AO tilldelad', { aoId: 'AO-001' }));
+      t.assert(r && r.ok === true, 'servern godtar den egna notisen: ' + JSON.stringify(r));
       await s.settle(1200);
       const unreadBefore = await s.eval(() => NotificationsService.unreadCount());
       t.assert(unreadBefore >= 1, 'oläst-räknaren ökar (' + unreadBefore + ')');
