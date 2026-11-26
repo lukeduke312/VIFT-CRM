@@ -1,9 +1,8 @@
 {
  "beskrivning": "T3-E (M9, D-02): de fem standardrollerna enligt BEHORIGHETSMATRIS §2 (fastställd 2026-11-27, K-01/K-02 fastställda 2026-11-28). Installeras bara med det manuella skriptet B_installera.sql efter separat GO; läggs aldrig in automatiskt och skriver aldrig över befintliga roller. Behörigheter i ejVerkstallda ger ingen åtkomst förrän deras serverkontroller finns (T4/AO-etappen); listan speglas i _vift_ej_verkstallda() (20261128000008, ändrad i T4-A 20261128000009). T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda; nya behörigheter staff_contacts_view (interna roller, inte begransad) och activity_log_view_all (admin, chef, ekonomi); chef har reports_view (matrisändring T3-E 5). T4-B (2026-11-28): time_view_all verkställd (time-entries-list: all personals arbetstid utan löneuppgifter, K-01) och borttagen ur ejVerkstallda (20261128000011); rollernas behörigheter oförändrade.",
- "version": "t4c-2026-11-28",
+ "version": "t4d-2026-11-28",
  "ejVerkstallda": {
   "ao_plan_own": "AO-etappen (AP-E)",
-  "rondering_utfor": "T4-D (Ö3)",
   "export_data": "T4-F (D-18)",
   "export_personal_data": "T4-F (D-18)"
  },

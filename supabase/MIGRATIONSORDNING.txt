@@ -99,3 +99,8 @@ REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.
 #    personal (objects_access_assigned, SÄK-7 vägen, D-05), D-23 (permanent radering tar bort den känsliga
 #    raden). D-16 (jämförelse, bara läsning) är ett manuellt skript: supabase/manual/t4c_d16_jamforelse/.
 20261128000012  migrations/20261128000012_t4c_atkomstinformation.sql
+# ── T4-D (2026-11-28): NY – EJ INSTALLERAD I STAGING (klass "ny" i MIG-1). Installeras efter T4-C
+#    (20261128000012); rollback FÖRST av T4 (supabase/rollback/T4-D/). Rondering per pass (rondering_utfor,
+#    SÄK-14/F19, Ö3): passåtgärder med tilldelningskontroll under lås, projektion per pass, ronderingshändelser
+#    för egna pass (T3-D beslut 5); aktiverar T4-C:s ronderingsgren i get-sensitive-fields.
+20261128000013  migrations/20261128000013_t4d_rondering.sql

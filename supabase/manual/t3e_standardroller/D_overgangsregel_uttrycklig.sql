@@ -1,6 +1,6 @@
 -- =====================================================================
 -- VIFT CRM — T3-E standardroller (M9, D-02): D. Övergångsregeln: gör en befintlig rolls effektiva AO-behörigheter uttryckliga (KRÄVER GO PER ROLL)
--- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4c-2026-11-28). Ändra inte för hand.
+-- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4d-2026-11-28). Ändra inte för hand.
 -- Körs i Supabase SQL Editor för STAGING (yyzljlqyzzcbxmcdbual) FÖRST efter separat GO.
 -- ALDRIG mot LIVE utan en egen LIVE-plan. Ingår INTE i migrationskedjan (inte db push).
 -- För EN roll som i dag får ao_start_own, ao_complete_own, ao_pool_take genom övergångsregeln (testplanen §4.6):

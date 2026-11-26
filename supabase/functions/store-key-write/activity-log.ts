@@ -67,8 +67,11 @@ export const TYPE_PERMS: Record<string, string[]> = {
   offer_created: ['offer_manage'], offer_sent: ['offer_manage'], offer_status: ['offer_manage'],
   sales_opportunity_won: ['sales_manage'], sales_opportunity_lost: ['sales_manage'],
   recurring_order_created: ['recurring_manage'],
-  rondering_created: ['ao_view_all'], rondering_started: ['ao_view_all'], rondering_completed: ['ao_view_all'],
-  point_ok: ['ao_view_all'], point_ej_aktuell: ['ao_view_all'], deviation_created: ['ao_view_all'],
+  /* T4-D (T3-D beslut 5): passbaserad behörighet — rondering_utfor för händelser i ronderingar där anroparen har
+     ett eget pass (referensen prövas i RPC:n, _vift_ref_visible/_vift_post_refs). Skapa rondering och avvikelser:
+     fortsatt ao_view_all. Samma lista som SQL _vift_activity_type_perms (20261128000013). */
+  rondering_created: ['ao_view_all'], rondering_started: ['ao_view_all', 'rondering_utfor'], rondering_completed: ['ao_view_all', 'rondering_utfor'],
+  point_ok: ['ao_view_all', 'rondering_utfor'], point_ej_aktuell: ['ao_view_all', 'rondering_utfor'], deviation_created: ['ao_view_all'],
   deviation_status: ['ao_view_all'], ao_from_deviation: ['ao_view_all'],
 }
 export function typeAllowed(type: string, perms: string[]): boolean {
