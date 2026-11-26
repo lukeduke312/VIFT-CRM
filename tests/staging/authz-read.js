@@ -76,7 +76,11 @@ const READ_ACTIONS = new Set(['readWithHash', 'readHashes', 'readAllWithHashes']
     const tl = await req('/functions/v1/time-entries-list', { method: 'GET', token: tok[role] });
     const tes = (tl.body && tl.body.timeEntries) || [];
     if (has(me.perms, 'payroll_view')) rep.add('R2 ' + role, null, 'ser ' + tes.length + ' tidposter (payroll_view)', { kalla: 'repo — skriver inte (in-memory rate-limit)' });
-    else {
+    else if (has(me.perms, 'time_view_all')) {
+      /* T4-B (K-01, D-08): time_view_all ger all personals tid men inga löneuppgifter (attest) i andras poster. */
+      const lon = tes.filter((t) => String(t.staffId) !== me.staffId && ['attested', 'attestedAt', 'attestedBy'].some((f) => f in t));
+      rep.add('R2 ' + role, tl.status === 200 ? lon.length === 0 : null, 'ser ' + tes.length + ' tidposter (time_view_all, K-01); andras poster med löneuppgifter: ' + lon.length, { kalla: 'repo — skriver inte (in-memory rate-limit)' });
+    } else {
       const foreign = tes.filter((t) => String(t.staffId) !== me.staffId);
       rep.add('R2 ' + role, tl.status === 200 || tl.status === 403 ? foreign.length === 0 : null, 'HTTP ' + tl.status + ', andras tidposter synliga: ' + foreign.length, { kalla: 'repo — skriver inte (in-memory rate-limit)' });
     }

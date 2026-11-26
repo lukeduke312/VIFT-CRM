@@ -86,20 +86,39 @@ function laddaVarld(db, U) {
   return store;
 }
 
+
+/* T4-B (2026-11-28): denna svit prövar T4-A-paketet SÅ SOM DET LEVERERADES — kedjan utan T4-B-migrationen
+   (20261128000011, schemajämförelse med T4_LAGE=T4-A-notiser) och Edge Functions ur T4-A-commiten (2060b8f).
+   T4-B:s ändringar av samma vägar prövas i t4b_material_priser.test.js (även hela kedjan och samspelet). */
+const T4A_COMMIT = '2060b8f';
+const T4B_MIG = 'migrations/20261128000011_t4b_material_priser_tid.sql';
+const T4REG = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't4-andringar.json'), 'utf8')).objekt;
+const EJ_T4B = Object.keys(T4REG).filter((k) => T4REG[k].paket !== 'T4-B');
+/* OBS-raden får bara nämna T4-B:s objekt (som inte är installerade i T4-A-läget). */
+const obsBaraT4b = (ut) => { const m = /OBS: T4-ändringar som inte syns[^\n]*/.exec(ut); return !m || EJ_T4B.every((k) => !m[0].includes(k)); };
+function t4aKalla() {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'vift-t4a-kod-'));
+  process.on('exit', () => { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) { /* ignore */ } });
+  execFileSync('tar', ['-x', '-C', d], { input: execFileSync('git', ['-C', path.join(__dirname, '..'), 'archive', T4A_COMMIT, 'supabase'], { maxBuffer: 512 * 1024 * 1024 }) });
+  return path.join(d, 'supabase');
+}
+
 (async () => {
   const HIST = fs.mkdtempSync(path.join(os.tmpdir(), 'vift-t3e-'));
   process.on('exit', () => { try { fs.rmSync(HIST, { recursive: true, force: true }); } catch (e) { /* ignore */ } });
   execFileSync('tar', ['-x', '-C', HIST], { input: execFileSync('git', ['-C', path.join(__dirname, '..'), 'archive', FORE_COMMIT, 'supabase'], { maxBuffer: 512 * 1024 * 1024 }) });
   const rotFore = path.join(HIST, 'supabase');
 
-  const r = byggReplik({});
+  process.env.T4_LAGE = 'T4-A-notiser';
+  const rotT4a = t4aKalla();
+  const r = byggReplik({ utelamna: [T4B_MIG] });
   const { db, U } = r;
   ok(r.steg.some((s) => /20261128000009_t4a_/.test(s.rel)), 'kedjan innehåller T4-A-migrationen 20261128000009');
   ok(r.rapport.oforklarade === 0, `schemajämförelse: 0 oförklarade (T4-A-objekten förklarade via t4-andringar.json): ${r.rapport.identiska} identiska, ${r.rapport.forklarade} förklarade`);
   laddaVarld(db, U);
   psql(db, `create table public._t4a_bas as select * from public.store; create table public._t4a_idem as select * from public.op_idempotency;`);
   const aterstall = () => psql(db, `begin; delete from public.store; insert into public.store select * from public._t4a_bas; delete from public.op_idempotency; insert into public.op_idempotency select * from public._t4a_idem; commit;`);
-  const ef = await laddaEf(db, EF);
+  const ef = await laddaEf(db, EF, { root: rotT4a });
 
   const rf = byggReplik({ rot: rotFore, schemakontroll: false });
   const Uf = rf.U;
@@ -417,7 +436,8 @@ function laddaVarld(db, U) {
 
   // ════════════════ Ej verkställda behörigheter (T3-E-registret) ════════════════
   const ejv = q(db, `select unnest(public._vift_ej_verkstallda()) as x`).map((x) => x.x).sort();
-  ok(JSON.stringify(ejv) === JSON.stringify(Object.keys(STD.ejVerkstallda).sort()) && ejv.length === 6 && !ejv.some((x) => ['cost_view', 'cost_edit', 'personal_data_view', 'bankgiro_edit'].includes(x)),
+  /* T4-A-läget: time_view_all är ännu inte verkställd (T4-B tar bort den ur registret och ur standardroller.json). */
+  ok(JSON.stringify(ejv) === JSON.stringify(Object.keys(STD.ejVerkstallda).concat(['time_view_all']).sort()) && ejv.length === 6 && !ejv.some((x) => ['cost_view', 'cost_edit', 'personal_data_view', 'bankgiro_edit'].includes(x)),
     '_vift_ej_verkstallda(): cost_view, cost_edit, personal_data_view och bankgiro_edit borttagna (verkställda i T4-A); registret = standardroller.json ejVerkstallda (6)', ejv);
   ok(['ao_plan_own', 'time_view_all', 'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'].every((x) => ejv.includes(x)), 'kvar som ej verkställda: ao_plan_own (AO-etappen), time_view_all (T4-B), objects_access_assigned (T4-C), rondering_utfor (T4-D), export_data och export_personal_data (T4-F)');
   { // varje nyverkställd behörighet ger exakt den beslutade åtkomsten, och inget mer
@@ -533,7 +553,7 @@ function laddaVarld(db, U) {
     aterstall(); }
 
   // ════════════════ Rollback (installera → rollback → installera) ════════════════
-  { const rb = byggReplik({ schemakontroll: false });
+  { const rb = byggReplik({ utelamna: [T4B_MIG], schemakontroll: false });
     const KS = { keys: ['vift_customers', 'vift_settings', 'vift_roles', 'vift_staff', 'vift_workOrders', 'vift_propertyObjects', 'vift_articles'], tables: ['app_users', 'op_idempotency', 'property_sensitive_access'] };
     // data som T4-A-koden skapar
     let x = rpc(rb.db, 'store_business_key_merge_write', { p_key: 'vift_settings', p_upserts: [{ id: 'slogan', data: 'T4', previous: null }], p_removals: [], p_caller_authorized: true, p_actor_id: rb.U.admin.staffId });
@@ -544,7 +564,7 @@ function laddaVarld(db, U) {
     /* Notisdelen (20261128000010) installeras efter T4-A och rullas därför tillbaka först (t4a_notiser.test.js prövar den). */
     psqlFile(rb.db, path.join(serverRot(), 'rollback', 'T4-A-notiser', 'rollback_t4a_notiser.sql'));
     psqlFile(rb.db, path.join(serverRot(), 'rollback', 'T4-A', 'rollback_t4a.sql'));
-    let ut = jamfor();
+    let ut = jamfor({ T4_LAGE: 'T4-A-notiser' });
     ok(ofo(ut) === 0 && /OBS: T4-ändringar som inte syns/.test(ut), 'rollback notiser + T4-A: schemat = läget efter T3-E (0 oförklarade; T4-A:s och notisdelens objekt borta)', ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
     ok(q(rb.db, `select 1 from pg_proc where proname like '\\_vift\\_t4a\\_%'`).length === 0 && q(rb.db, `select 1 from pg_proc where oid = to_regprocedure('public.store_business_key_write(text,jsonb,text,boolean,text)')`).length === 1,
       'rollback T4-A: hjälpfunktionerna borta, store_business_key_write med 5 parametrar tillbaka');
@@ -553,8 +573,8 @@ function laddaVarld(db, U) {
     ok(!x.error, 'äldre RPC (5 parametrar) fungerar på T4-A-data efter rollback', x.error);
     let fel = null;
     try { psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000009_t4a_skyddade_falt.sql')); psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000010_t4a_notiser.sql')); } catch (e) { fel = e.message; }
-    ut = jamfor();
-    ok(!fel && ofo(ut) === 0 && !/OBS: T4-ändringar som inte syns/.test(ut), 'ny installation efter rollback (0009, därefter notisdelen 0010): STOP-kontrollen godtar T3-E-versionerna; schemat = alla registrerade ändringar', fel);
+    ut = jamfor({ T4_LAGE: 'T4-A-notiser' });
+    ok(!fel && ofo(ut) === 0 && obsBaraT4b(ut), 'ny installation efter rollback (0009, därefter notisdelen 0010): STOP-kontrollen godtar T3-E-versionerna; schemat = alla registrerade T4-A- och notisändringar (T4-B inte installerad)', fel || ut.split('\n').filter((l) => /OFÖRKLARAD|OBS/.test(l)).slice(0, 5));
     let stop = null;
     try { psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000009_t4a_skyddade_falt.sql')); } catch (e) { stop = e.message; }
     ok(stop && /T4-A STOP/.test(stop), 'STOP-kontroll: en andra körning av 20261128000009 avbryts', stop);

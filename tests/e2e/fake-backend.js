@@ -23,6 +23,7 @@ const vm = require('vm');
 /* T4-A (2026-11-28): skyddade fält, projektion även för skrivare, staff_contacts_view,
    activity_log_view_all, inaktiverad roll, åtkomst per post (t4a-regler.js = serverns regler). */
 const T4A = require('./t4a-regler');
+const T4B = require('./t4b-regler'); // T4-B (2026-11-28): material, priser och tid
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -205,13 +206,15 @@ const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'activ
 const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
 /* T3-E (20261128000008): ej verkställda behörigheter (= _vift_ej_verkstallda()) räknas inte när
    servern avgör intern/extern — de ger ingen åtkomst förrän T4. */
-const T3E_EJ_VERKSTALLDA = T4A.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda
+const T3E_EJ_VERKSTALLDA = T4B.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda; T4-B: time_view_all
 const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'].concat(T3E_EJ_VERKSTALLDA);
 const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
   'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
 const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activities', 'vift_offers', 'vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts',
   /* T4-A: inställningar, artiklar och urval per post för återkommande, projekt, avvikelser, inspektioner. */
-  'vift_settings', 'vift_articles', 'vift_recurringOrders', 'vift_projects', 'vift_avvikelser', 'vift_inspections'];
+  'vift_settings', 'vift_articles', 'vift_recurringOrders', 'vift_projects', 'vift_avvikelser', 'vift_inspections',
+  /* T4-B: prisgrupper (timpris bara med prisläsrätt, annars bara aktiva grupper utan belopp). */
+  'vift_priceGroups'];
 const anyOf = (p, list) => list.some((x) => p.includes(x));
 const pick = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => keys.includes(k)));
 const omit = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k)));
@@ -226,6 +229,8 @@ function t3dFull(key, perms, keyPerms) {
   if (key === 'vift_activityLog') return T4A.loggFull(p);
   if (!T4A.allaLasbara(key, p)) return false;
   if (['vift_recurringOrders', 'vift_projects', 'vift_inspections', 'vift_avvikelser'].includes(key)) return T4A.kundLas(p);
+  /* T4-B (D-09, D-11): artiklar och prisgrupper i sin helhet bara med prisläsrätt. */
+  if (['vift_articles', 'vift_priceGroups'].includes(key) && !T4B.prisLas(p)) return false;
   const wp = keyPerms[key]; if (wp && p.includes(wp)) return true;
   switch (key) {
     case 'vift_offers': case 'vift_offerEvents': case 'vift_offerAttachments': return p.includes('offer_manage');
@@ -387,7 +392,8 @@ class FakeSupabase {
     const id = me && me.id ? String(me.id) : '';
     const obj = (e) => e && typeof e === 'object' && !Array.isArray(e);
     const refs = () => this.t3dRefs(p, id);
-    if (key === 'vift_articles') return value.map((e) => T4A.proj(key, e, p));
+    if (key === 'vift_articles') return value.map((e) => T4B.artikel(T4A.proj(key, e, p), p)); // T4-B: försäljningspris bara med prisläsrätt
+    if (key === 'vift_priceGroups') return T4B.prisgrupper(value, p); // T4-B (D-11, R22)
     if (key === 'vift_staff') {
       /* T4-A: arbetskontakt till kollegor = staff_contacts_view (övergång: T3-E:s härledning). */
       const ext = !T4A.kontakt(p);
@@ -517,9 +523,18 @@ class FakeSupabase {
     }
   }
   /* T4-A: AO i ett skrivsvar projiceras som en läsning (ao-time-write, log/checklist-EF:erna, invoice-write). */
-  _t4aAoSvar(res, perms) {
+  _t4aAoSvar(res, perms, me) {
     if (res && res.body && typeof res.body === 'object' && res.body.workOrder && typeof res.body.workOrder === 'object') {
-      res = Object.assign({}, res, { body: Object.assign({}, res.body, { workOrder: T4A.projectWorkOrder(clone(res.body.workOrder), perms) }) });
+      res = Object.assign({}, res, { body: Object.assign({}, res.body, { workOrder: T4B.projectWorkOrder(clone(res.body.workOrder), perms) }) });
+    }
+    /* T4-B: materialraden och tidposten i svaret projiceras som en läsning (pris/timpris bara med prisläsrätt). */
+    if (res && res.body && typeof res.body === 'object' && res.body.row && typeof res.body.row === 'object') {
+      res = Object.assign({}, res, { body: Object.assign({}, res.body, { row: T4B.projectWorkOrder({ materials: [clone(res.body.row)] }, perms).materials[0] }) });
+    }
+    for (const f of ['timeEntry', 'entry']) {
+      if (res && res.body && typeof res.body === 'object' && res.body[f] && typeof res.body[f] === 'object') {
+        res = Object.assign({}, res, { body: Object.assign({}, res.body, { [f]: T4B.projectTimeEntry(clone(res.body[f]), perms, me && me.id) }) });
+      }
     }
     return res;
   }
@@ -640,19 +655,21 @@ class FakeSupabase {
       const me = this.staffFor(email);
       switch (fn) {
         case 'store-key-write': return this.storeKeyWrite(body, email, perms, me);
-        case 'ao-time-write': return this._t4aAoSvar(this.aoTimeWrite(body, perms, me, { email }), perms);
+        case 'ao-time-write': return this._t4aAoSvar(this.aoTimeWrite(body, perms, me, { email }), perms, me);
         case 'work-orders-list': {
           // T3-B: poolregel + poolprojektion (K-03); T4-A: projectWorkOrder (portkod bara med objects_sensitive,
           // även för ao_edit; inköpspris bara med cost_view; AO-ekonomi inte till fältroller, D-06).
           const full = this.has(perms, 'ao_view_all');
           const list = (this.get('workOrders') || []).filter((a) => this.canViewAO(a, perms, me.id))
             .map((a) => (!full && !isAssigned(a, me.id) && isOpenPool(a) ? poolProjection(a) : a))
-            .map((a) => T4A.projectWorkOrder(a, perms));
+            .map((a) => T4B.projectWorkOrder(a, perms)); // T4-B: även materialradernas försäljningspris (D-09)
           return { status: 200, body: { workOrders: list } };
         }
         case 'time-entries-list': {
           const all = this.get('timeEntries') || [];
-          return { status: 200, body: { timeEntries: this.has(perms, 'payroll_view') ? all : all.filter((t) => t.staffId === me.id) } };
+          /* T4-B (K-01, D-08, D-11): time_view_all = all personals tid utan löneuppgifter; timpris bara med prisläsrätt. */
+          const allaTid = this.has(perms, 'payroll_view') || this.has(perms, 'time_view_all');
+          return { status: 200, body: { timeEntries: (allaTid ? all : all.filter((t) => t.staffId === me.id)).map((t) => T4B.projectTimeEntry(t, perms, me.id)) } };
         }
         case 'invoice-write': return this._t4aAoSvar(this.invoiceWrite(body, perms, me), perms);
         case 'rondering-pass-write': return this.ronderingWrite(body, perms, me);
@@ -882,7 +899,7 @@ class FakeSupabase {
           const ao = (this.get('workOrders') || []).find((a) => a.id === body.aoId);
           if (!ao) return DEFINITE(404, 'not_found');
           if (!(isAssigned(ao, me && me.id) || this.has(effAoPerms(perms), 'ao_edit'))) return REGEL(403, 'forbidden', 'not_assigned');
-          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+          if (T4B.tidLast(ao)) return REGEL(409, 'ao_locked'); // T4-B: instämpling låst även på klar AO
         }
         const n = { active: !!body.active, ts: body.active ? body.ts : null, aoId: body.active ? (body.aoId || null) : null, revision: s.revision + 1 };
         this.stamp.set(email, n);
@@ -899,7 +916,7 @@ class FakeSupabase {
   aoTimeWrite(body, perms, me, ctx) {
     if (body.action === '__probe__') return DEFINITE(400, 'unknown_action');
     const key = body.idempotencyKey;
-    const BUNDEN = ['patch_ao', 'take_from_pool', 'create_time'];
+    const BUNDEN = ['patch_ao', 'take_from_pool', 'create_time', 'add_material', 'update_material', 'remove_material', 'correct_time'];
     if (key && BUNDEN.includes(body.action)) {
       const rest = Object.assign({}, body); delete rest.idempotencyKey;
       const fp = JSON.stringify([body.action, me.id, rest]);
@@ -939,7 +956,11 @@ class FakeSupabase {
     const oldIds = old.filter((o) => o && o.id).map((o) => o.id);
     return neu.map((n) => ((n && n.id && oldIds.includes(n.id)) || (!(n && n.id) && old.some((x) => same(x, n))) ? n : Object.assign({}, n, { addedBy: meId, addedAt: nowText() })));
   }
+  /* T4-B: regelfel ur t4b-regler.js (kastade { t4b: [status, error, reason] }) blir svar. */
   _aoTime(b, perms, me, ctx) {
+    try { return this._aoTimeInner(b, perms, me, ctx); } catch (e) { if (e && e.t4b) return REGEL(e.t4b[0], e.t4b[1], e.t4b[2]); throw e; }
+  }
+  _aoTimeInner(b, perms, me, ctx) {
     const aos = this.get('workOrders') || [];
     const tes = this.get('timeEntries') || [];
     const now = new Date().toISOString();
@@ -954,6 +975,18 @@ class FakeSupabase {
         const ignoredCreate = [];
         if (!(this.has(perms, 'cost_view') && this.has(perms, 'cost_edit')) && Array.isArray(ao.materials)) {
           ao.materials = ao.materials.map((m) => { if (m && typeof m === 'object' && !T4A.tom(m.buyPrice)) { m = Object.assign({}, m); delete m.buyPrice; if (!ignoredCreate.length) ignoredCreate.push('materials[].buyPrice'); } return m; });
+        }
+        /* T4-B (D-09, D-10): försäljningspris i nya rader bara från en roll som får sätta pris och > 0; annars okänt. */
+        if (Array.isArray(ao.materials)) {
+          const satta = T4B.prisSatta(perms);
+          ao.materials = ao.materials.map((m) => {
+            if (!m || typeof m !== 'object' || Array.isArray(m)) return m;
+            const r = Object.assign({}, m); const sp = Number(r.sellPrice); const given = !T4A.tom(r.sellPrice) && r.sellPrice !== undefined;
+            if (satta && given && Number.isFinite(sp) && sp > 0) { r.sellPrice = sp; r.sellPriceUnknown = false; if (!r.priceSource) r.priceSource = 'manual'; }
+            else { if (given && !ignoredCreate.includes('materials[].sellPrice')) ignoredCreate.push('materials[].sellPrice'); r.sellPrice = null; r.sellPriceUnknown = true; r.priceSource = 'unknown'; }
+            if (T4A.tom(r.buyPrice) || r.buyPrice === undefined || !(Number(r.buyPrice) > 0)) { delete r.buyPrice; r.buyPriceUnknown = true; }
+            return r;
+          });
         }
         if (ao.id && aos.some((a) => a.id === ao.id)) return DEFINITE(409, 'id_collision');
         if (!ao.id) ao.id = 'AO-' + (++this.aoSeq);
@@ -983,18 +1016,18 @@ class FakeSupabase {
         if (this.has(eff, 'ao_edit')) {
           if (billingTouched(ao, pt)) return REGEL(403, 'forbidden', 'invoice_path_required');
           { const r = t4(); if (!r.ok) return REGEL(403, 'forbidden', r.reason); }
+          /* T4-B: hela materiallistan — serverpris för nya rader, skyddade fält, fakturerade källrader låsta. */
+          if ('materials' in pt) {
+            const r = T4B.materialLista(ao, pt.materials, perms, me.id, now, this.get('invoices') || [], (k) => this.get(k.replace(/^vift_/, '')));
+            pt.materials = r.rows; ignored = ignored.concat(r.ignored);
+          }
           const hadStaff = aoStaffOf(ao).length > 0;
           Object.assign(ao, pt);
           if ('staff' in pt && !('poolOpen' in pt) && ao.status === 'pool' && aoStaffOf(ao).length > 0 && !hadStaff) ao.poolOpen = false;
         } else if (keys.length === 1 && keys[0] === 'materials') {
+          /* T4-B (D-19, SEC-B1-06): fältet skriver aldrig hela listan — radvisa åtgärder. */
           if (!this.has(eff, 'ao_material')) return DEFINITE(403, 'forbidden');
-          if (!(isAssigned(ao, me.id) || this.has(eff, 'ao_view_all'))) return REGEL(403, 'forbidden', 'not_assigned');
-          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
-          if (!Array.isArray(pt.materials) || pt.materials.length > 500) return DEFINITE(400, 'missing_fields');
-          { const r = t4(); if (!r.ok) return REGEL(403, 'forbidden', r.reason); }
-          const merged = this._materialMerge(ao.materials, pt.materials, me.id);
-          if (!merged) return REGEL(403, 'forbidden', 'not_own_row');
-          ao.materials = merged;
+          return REGEL(403, 'forbidden', 'row_path_required');
         } else if (pt.status === 'pågående' && only(['status'])) {
           if (!this.has(eff, 'ao_start_own')) return DEFINITE(403, 'forbidden');
           if (!isAssigned(ao, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
@@ -1071,17 +1104,31 @@ class FakeSupabase {
           if (!stampOk) {
             if (!ao) return DEFINITE(404, 'not_found');
             if (!(forOther || isAssigned(ao, me.id) || this.has(perms, 'ao_edit'))) return REGEL(403, 'forbidden', 'not_assigned');
-            if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+            if (T4B.tidLast(ao)) return REGEL(409, 'ao_locked'); // T4-B: låst även på klar AO
           }
+          var t4bStampOk = stampOk; // eslint-disable-line no-var
         }
         if (tes.some((t) => t.id === e.id)) return DEFINITE(409, 'id_collision');
-        // D-11: timpriset sätts av servern från prisgruppen.
-        const pg = e.priceGroupId ? (this.get('priceGroups') || []).find((x) => x.id === e.priceGroupId) : null;
-        const rate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0;
+        // D-11 (T4-B): timpriset från en TILLÅTEN prisgrupp; okänt (null) utan grupp, aldrig 0.
+        const get = (k) => this.get(k.replace(/^vift_/, ''));
+        const ctxP = { customerId: ao && ao.customerId, propertyId: ao && ao.propertyId, contractId: ao && ao.contractId, date: e.date };
         const ignored = [];
-        if ('hourRate' in e && Number(e.hourRate) !== rate) ignored.push('hourRate');
-        e.hourRate = rate;
+        let pg = null;
+        if (e.priceGroupId) {
+          pg = T4B.pris('priceGroup', e.priceGroupId, ctxP, get);
+          const kontor = forOther || T4B.kontor(effAoPerms(perms));
+          if (!pg || (!kontor && (pg.active === false || (ao && ao.priceGroupId && ao.priceGroupId !== e.priceGroupId)))) {
+            if (!(typeof t4bStampOk !== 'undefined' && t4bStampOk)) return REGEL(403, 'forbidden', 'price_group_not_allowed');
+            ignored.push('priceGroupId');
+            pg = ao && ao.priceGroupId ? T4B.pris('priceGroup', ao.priceGroupId, ctxP, get) : null;
+            e.priceGroupId = pg ? pg.ref : '';
+          }
+        }
+        const rate = pg && pg.priceKnown ? pg.unitPrice : null;
+        if ('hourRate' in e && T4B.tal(e.hourRate) !== rate) ignored.push('hourRate');
+        delete e.hourRateUnknown; e.hourRate = rate; e.hourRateUnknown = rate === null;
         if (pg) { if ('priceGroupName' in e && e.priceGroupName !== (pg.name || '')) ignored.push('priceGroupName'); e.priceGroupName = pg.name || ''; }
+        else if (e.priceGroupName) { ignored.push('priceGroupName'); e.priceGroupName = ''; }
         e.createdAt = now;
         tes.unshift(e);
         if (ao && !(ao.timeEntries || []).includes(e.id)) ao.timeEntries = (ao.timeEntries || []).concat([e.id]);
@@ -1092,20 +1139,30 @@ class FakeSupabase {
         const i = tes.findIndex((t) => t.id === b.entryId);
         if (i < 0) return DEFINITE(404, 'not_found');
         const own = tes[i].staffId === me.id;
-        if (!(this.has(perms, 'payroll_manage') || (own && this.has(perms, 'ao_time')))) return DEFINITE(403, 'forbidden');
-        if (tes[i].attested && !this.has(perms, 'all')) return DEFINITE(409, 'attested_locked');
-        if (b.action === 'delete_time') { tes.splice(i, 1); save(); return { status: 200, body: { ok: true } }; }
         const pt = clone(b.patch || {});
         const ignored = [];
-        if (!(this.has(perms, 'payroll_manage') || this.has(perms, 'invoice_create') || this.has(perms, 'ao_edit'))) {
+        /* T4-B: fältets prisgruppsbyte prövas i EF:en (aktiv grupp, AO:ns grupp) före RPC:n. */
+        if (b.action === 'patch_time' && !(this.has(perms, 'payroll_manage') || this.has(perms, 'invoice_create') || this.has(perms, 'ao_edit'))) {
           ['hourRate', 'priceGroupName'].forEach((k) => { if (k in pt) { ignored.push(k); delete pt[k]; } });
-          if (pt.priceGroupId) { const pg = (this.get('priceGroups') || []).find((x) => x.id === pt.priceGroupId); pt.hourRate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0; if (pg) pt.priceGroupName = pg.name || ''; }
+          if (pt.priceGroupId) {
+            const pg = (this.get('priceGroups') || []).find((x) => x.id === pt.priceGroupId);
+            const aoT = aos.find((a) => a.id === (pt.aoId || tes[i].aoId));
+            if (!pg || ['false', '0'].includes(String(pg.active)) || (aoT && aoT.priceGroupId && aoT.priceGroupId !== pt.priceGroupId)) return REGEL(403, 'forbidden', 'price_group_not_allowed');
+            const r = T4B.tal(pg.hourRate); pt.hourRate = r !== null && r >= 0 ? r : null; pt.hourRateUnknown = pt.hourRate === null; pt.priceGroupName = pg.name || '';
+          }
         }
+        if (!(this.has(perms, 'payroll_manage') || (own && this.has(perms, 'ao_time')))) return DEFINITE(403, 'forbidden');
+        if (tes[i].attested && !this.has(perms, 'all')) return DEFINITE(409, 'attested_locked');
+        /* T4-B: fakturerad tidpost låst; tid på klar eller låst AO bara via correct_time. */
+        if (T4B.kallaStatus(this.get('invoices') || [], 'time:' + tes[i].id).status !== 'ofakturerad') return REGEL(409, 'invoiced_locked');
+        const curAo = tes[i].aoId ? aos.find((a) => a.id === tes[i].aoId) : null;
+        if (curAo && T4B.tidLast(curAo)) return REGEL(409, 'ao_locked');
+        if (b.action === 'delete_time') { tes.splice(i, 1); save(); return { status: 200, body: { ok: true } }; }
         if (pt.aoId && pt.aoId !== tes[i].aoId) {
           const nyAo = aos.find((a) => a.id === pt.aoId);
           if (!nyAo) return DEFINITE(404, 'not_found');
           if (!this.has(perms, 'payroll_manage') && !isAssigned(nyAo, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
-          if (isLockedAO(nyAo)) return REGEL(409, 'ao_locked');
+          if (T4B.tidLast(nyAo)) return REGEL(409, 'ao_locked');
         }
         Object.assign(tes[i], pt); tes[i].updatedAt = now;
         save(); return { status: 200, body: Object.assign({ ok: true, timeEntry: tes[i] }, ignored.length ? { ignoredFields: ignored } : {}) };
@@ -1115,6 +1172,88 @@ class FakeSupabase {
         const t = tes.find((x) => x.id === b.entryId); if (!t) return DEFINITE(404, 'not_found');
         t.attested = !!b.attested; t.attestedAt = b.attested ? now : ''; t.attestedBy = b.attested ? me.id : '';
         save(); return { status: 200, body: { action: 'attest_time', timeEntry: t } }; // som riktiga ao-time-write (time_entry_set_attested → { timeEntry, serverSignature })
+      }
+      /* T4-B (D-19, R13–R15): radvisa materialåtgärder (work_order_material_add/update/remove). */
+      case 'add_material': case 'update_material': case 'remove_material': {
+        if (!this.has(eff, 'ao_material') && !this.has(eff, 'ao_edit')) return DEFINITE(403, 'forbidden');
+        const invs = this.get('invoices') || [];
+        const get = (k) => this.get(k.replace(/^vift_/, ''));
+        if (!b.aoId || (b.action === 'add_material' ? !(b.row && typeof b.row === 'object' && !Array.isArray(b.row)) : !b.rowId) || (b.action === 'update_material' && !(b.patch && typeof b.patch === 'object' && !Array.isArray(b.patch)))) return DEFINITE(400, 'missing_fields');
+        const ao = aos.find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
+        const rows = Array.isArray(ao.materials) ? ao.materials : (ao.materials = []);
+        if (b.action === 'add_material') {
+          if (!(this.has(eff, 'ao_edit') || isAssigned(ao, me.id) || this.has(eff, 'ao_view_all'))) return REGEL(403, 'forbidden', 'not_assigned');
+          if (T4B.aoLast(ao)) return REGEL(409, 'ao_locked');
+          if (rows.length >= 500) return DEFINITE(400, 'invalid_row');
+          const inn = clone(b.row); const ign = [];
+          ['id', 'addedBy', 'addedAt', 'priceSource', 'priceSourceId', 'sellPriceUnknown', 'buyPriceUnknown', 'updatedAt', 'updatedBy'].forEach((f) => { if (f in inn) { ign.push(f); delete inn[f]; } });
+          const r = T4B.nyRad(ao, inn, perms, me.id, now, 'M-' + crypto.randomBytes(8).toString('hex'), get);
+          rows.push(r.row); ao.updatedAt = now; save();
+          const ig = ign.concat(r.ignored);
+          return { status: 200, body: Object.assign({ action: b.action, workOrder: ao, row: r.row }, ig.length ? { ignoredFields: ig } : {}) };
+        }
+        const ri = rows.findIndex((m) => m && m.id === b.rowId); if (ri < 0) return DEFINITE(404, 'not_found');
+        T4B.radKontroll(ao, rows[ri], eff, me.id, invs, (p, x) => this.has(p, x));
+        if (b.expectedUpdatedAt != null && (rows[ri].updatedAt || rows[ri].addedAt || '') !== b.expectedUpdatedAt) return DEFINITE(409, 'stale_write');
+        if (b.action === 'remove_material') { rows.splice(ri, 1); ao.updatedAt = now; save(); return { status: 200, body: { action: b.action, workOrder: ao, removedId: b.rowId } }; }
+        const u = T4B.radUppdatera(rows[ri], b.patch, perms, me.id, now);
+        rows[ri] = u.row;
+        if (u.kompletterad) {
+          const namn = [me.firstName, me.lastName].filter(Boolean).join(' ') || me.id;
+          ao.log = (Array.isArray(ao.log) ? ao.log : []).concat([{ id: 'L-PRIS-' + crypto.randomBytes(6).toString('hex'), type: 'material_price_completed', text: namn + ' kompletterade priset för materialraden "' + (u.row.name || '') + '"', userName: namn, staffId: me.id, timestamp: now, visibility: 'internal' }]);
+        }
+        ao.updatedAt = now; save();
+        return { status: 200, body: Object.assign({ action: b.action, workOrder: ao, row: u.row }, u.ignored.length ? { ignoredFields: u.ignored } : {}) };
+      }
+      /* T4-B (T3-B beslut 1, punkt 276): behörig, loggad rättning/komplettering av tid (time_entry_correct). */
+      case 'correct_time': {
+        if (!this.has(perms, 'payroll_manage')) return DEFINITE(403, 'forbidden');
+        const reason = String(b.reason || '').trim();
+        if (!b.entry || typeof b.entry !== 'object' || Array.isArray(b.entry)) return DEFINITE(400, 'missing_fields');
+        if (reason.length < 5 || reason.length > 500) return DEFINITE(400, 'reason_required');
+        const inn = clone(b.entry);
+        ['id', 'createdAt', 'updatedAt', 'attested', 'attestedAt', 'attestedBy', 'hourRate', 'hourRateUnknown', 'priceGroupName', 'corrections', 'registeredById', 'registeredByName'].forEach((f) => delete inn[f]);
+        const invs = this.get('invoices') || [];
+        let ny, typ, fore = {}, efter = {}, gamlaAo = null, idx = -1;
+        if (b.entryId) {
+          typ = 'rattning';
+          idx = tes.findIndex((t) => t.id === b.entryId); if (idx < 0) return DEFINITE(404, 'not_found');
+          const t = tes[idx];
+          if (t.attested === true || t.attested === 'true') return DEFINITE(409, 'attested_locked');
+          if (T4B.kallaStatus(invs, 'time:' + t.id).status !== 'ofakturerad') return REGEL(409, 'invoiced_locked');
+          if (b.expectedUpdatedAt != null && (t.updatedAt || t.createdAt || '') !== b.expectedUpdatedAt) return DEFINITE(409, 'stale_write');
+          gamlaAo = aos.find((a) => a.id === t.aoId) || null;
+          if (gamlaAo && T4B.aoLast(gamlaAo)) return REGEL(409, 'ao_locked');
+          ny = clone(t);
+          for (const f of Object.keys(inn)) {
+            if (!['date', 'startStr', 'endStr', 'minutes', 'comment', 'priceGroupId', 'billable', 'aoId', 'internal'].includes(f) || T4A.lika(inn[f], t[f])) continue;
+            fore[f] = f in t ? t[f] : null; efter[f] = inn[f]; ny[f] = inn[f];
+          }
+          if (!Object.keys(efter).length) return DEFINITE(400, 'missing_fields');
+        } else {
+          typ = 'komplettering';
+          const st = (this.get('staff') || []).find((x) => x.id === inn.staffId && recActive(x));
+          if (!inn.aoId || !inn.staffId || !st) return DEFINITE(400, 'missing_fields');
+          ny = Object.assign({}, inn, { registeredById: me.id, registeredByName: [me.firstName, me.lastName].filter(Boolean).join(' ') || me.id, staffName: [st.firstName, st.lastName].filter(Boolean).join(' ') || st.id });
+          delete ny.deleted; efter = clone(inn);
+        }
+        const malAo = aos.find((a) => a.id === ny.aoId); if (!malAo) return DEFINITE(404, 'not_found');
+        if (T4B.aoLast(malAo)) return REGEL(409, 'ao_locked');
+        const min = T4B.tal(ny.minutes);
+        if (min === null || min <= 0 || min > 1440 * 7 || !T4B.datumOk(ny.date)) return DEFINITE(400, 'missing_fields');
+        let pg = null;
+        if (ny.priceGroupId) { pg = T4B.pris('priceGroup', ny.priceGroupId, { customerId: malAo.customerId, propertyId: malAo.propertyId, contractId: malAo.contractId, date: ny.date }, (k) => this.get(k.replace(/^vift_/, ''))); if (!pg) return REGEL(403, 'forbidden', 'price_group_not_allowed'); }
+        if (typ === 'komplettering' || 'priceGroupId' in efter) { const r = pg && pg.priceKnown ? pg.unitPrice : null; Object.assign(ny, { hourRate: r, hourRateUnknown: r === null, priceGroupName: pg ? pg.name : '' }); }
+        ny.updatedAt = now;
+        ny.corrections = (Array.isArray(ny.corrections) ? ny.corrections : []).concat([{ at: now, by: me.id, type: typ, reason, before: fore, after: efter }]);
+        if (typ === 'komplettering') { ny.id = 'TID-K-' + crypto.randomBytes(6).toString('hex'); ny.createdAt = now; tes.unshift(ny); } else tes[idx] = ny;
+        if (gamlaAo && gamlaAo.id !== malAo.id) gamlaAo.timeEntries = (gamlaAo.timeEntries || []).filter((x) => x !== ny.id);
+        if (!(malAo.timeEntries || []).includes(ny.id)) malAo.timeEntries = (malAo.timeEntries || []).concat([ny.id]);
+        const namn = [me.firstName, me.lastName].filter(Boolean).join(' ') || me.id;
+        malAo.log = (Array.isArray(malAo.log) ? malAo.log : []).concat([{ id: 'L-TIDR-' + crypto.randomBytes(6).toString('hex'), type: 'time_corrected', text: namn + (typ === 'komplettering' ? ' kompletterade tid i efterhand (' : ' rättade tid i efterhand (') + ny.id + '): ' + reason, userName: namn, staffId: me.id, timestamp: now, visibility: 'internal' }]);
+        malAo.updatedAt = now;
+        save();
+        return { status: 200, body: { action: 'correct_time', timeEntry: ny, correction: typ } };
       }
       default: return DEFINITE(400, 'unknown_action');
     }
@@ -1157,6 +1296,10 @@ class FakeSupabase {
       const claimed = new Set();
       invs.filter((i) => ACTIVE.includes(i.status)).forEach((i) => (i.lines || []).forEach((l) => (l.sourceRefs || []).forEach((r) => claimed.add(r.sourceKey))));
       if ((inv.lines || []).some((l) => (l.sourceRefs || []).some((r) => claimed.has(r.sourceKey)))) return DEFINITE(409, 'source_collision');
+      /* T4-B (D-10, R20, R21, VK-1): källraderna prövas mot sina källor (invoice_append_checked). */
+      if (inv.sourceAware === true || inv.sourceAware === 'true') {
+        try { T4B.fakturaKallor(inv, invs, this.get('workOrders') || [], this.get('timeEntries') || []); } catch (e) { if (e && e.t4b) return DEFINITE(e.t4b[0], e.t4b[1]); throw e; }
+      }
       inv.id = inv.id || ('FU-' + (++this.invSeq)); inv.revision = 0; inv.status = inv.status || 'utkast';
       invs.unshift(inv); save(); return { status: 200, body: { invoice: inv } };
     }
@@ -1172,7 +1315,11 @@ class FakeSupabase {
       case 'discountSet': inv.discount = clone(b.discount); break;
       case 'taxReductionSet': { const tr = b.taxReduction || b; inv.taxReduction = { type: tr.type, amount: tr.amount, basis: tr.basis, note: tr.note }; break; }
       case 'metaUpdate': Object.assign(inv, clone(b.patch)); break;
-      case 'setStatus': inv.status = b.status; break;
+      case 'setStatus': {
+        /* T4-B (D-10, SEC-B1-15): okänt försäljningspris stoppar utskick (invoice_set_status). */
+        if (b.status === 'skickad' && inv.status !== 'skickad') { try { T4B.prisKontroll(inv); } catch (e) { if (e && e.t4b) return DEFINITE(e.t4b[0], e.t4b[1]); throw e; } }
+        inv.status = b.status; break;
+      }
       case 'draftDelete': { const i = invs.indexOf(inv); invs.splice(i, 1); save(); return { status: 200, body: { ok: true, activityLog: this.t3dProject('vift_activityLog', this.get('activityLog'), perms, me) } }; }
       default: return DEFINITE(400, 'unknown_action');
     }

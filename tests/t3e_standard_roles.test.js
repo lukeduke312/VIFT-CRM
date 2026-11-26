@@ -155,7 +155,9 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
     'SEC-CUST-03 (T4-A, SÄK-7 stängd): chef − objects_sensitive är skrivare (customer_manage) men får INTE portkod eller nyckelinformation i registret (projektion även för skrivare, fältvis sammanslagning vid skrivning)');
   await NEJ('SEC-CUST-04 (chef − invoice_create): invoice-write → 403 forbidden', () => ef.anropa('invoice-write', { user: U.cust04, body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'L-C4', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } } }), FORB);
   await JA('SEC-CUST-04 (+, D-07): standardrollen chef (invoice_create) lägger till en rad i fakturaunderlaget', () => ef.anropa('invoice-write', { user: U.chef, body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'L-C4', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } } }), ['store:vift_invoices']);
-  await lika('SEC-CUST-05 (chef − time_view_all)', std('chef'), EGNA.c05, 'VERKNINGSLÖS NU: time_view_all verkställs i T4-B (K-01: all personal); time-entries-list ger i dag bara egna tidposter med och utan den');
+  /* T4-B (2026-11-28): time_view_all är verkställd (K-01); raden prövar nu den beslutade åtkomsten exakt (tidigare "verkningslös nu"). */
+  await exakt('SEC-CUST-05 (chef − time_view_all)', std('chef'), EGNA.c05, ['tel'],
+    'VERKSTÄLLD (T4-B, K-01): med time_view_all ger time-entries-list all personals arbetstid (utan löneuppgifter); utan den bara egna — inget annat skiljer');
   await lika('SEC-CUST-06 (chef − export_data)', std('chef'), EGNA.c06, 'VERKNINGSLÖS NU på servern: export_data verkställs i T4-F (ingen serverexport finns; klientens export spärras inte av den, se VIFT-CRM)');
   await NEJ('SEC-CUST-07 (ekonomi − payroll_manage): attest_time → 403 forbidden', () => AW(U.cust07, { action: 'attest_time', entryId: 'TE-R2', attested: true }), FORB);
   await JA('SEC-CUST-07 (+, D-08): standardrollen ekonomi attesterar', () => AW(U.ekonomi, { action: 'attest_time', entryId: 'TE-R2', attested: true }), ['store:vift_timeEntries', 'tabell:op_idempotency']);
@@ -230,7 +232,9 @@ const ids = (l) => (Array.isArray(l) ? l : []).map((a) => a.id).sort().join(',')
   await NEJ('SEC-TID-02-lik (begransad, utan ao_time): create_time på egen AO → 403 forbidden', () => AW(U.begransad, { action: 'create_time', entry: { id: 'TE-S4', aoId: 'AO-A1', date: '2026-11-24', minutes: 60 } }), FORB);
   const tel = async (u) => { const t = await ef.anropa('time-entries-list', { user: u }); return t.body.entries || t.body.timeEntries || []; };
   ok((await tel(U.falt)).every((t) => t.staffId === U.falt.staffId) && (await tel(U.begransad)).length === 0, 'SEC-TID-09 (personal, begransad): time-entries-list bara egna');
-  ok((await tel(U.chef)).every((t) => t.staffId === U.chef.staffId), 'SEC-TID-06 (chef): i dag bara egna — time_view_all verkställs i T4-B (K-01); ingen breddning nu');
+  { const tc = await tel(U.chef); const andras = tc.filter((t) => t.staffId !== U.chef.staffId);
+    ok(tc.length === 3 && andras.length > 0 && andras.every((t) => !('attested' in t) && !('attestedBy' in t) && !('attestedAt' in t)),
+      'SEC-TID-06 (chef, T4-B): time_view_all — all personals tidposter, utan attest och andra löneuppgifter (K-01, D-08)', tc); }
   ok((await tel(U.ekonomi)).length === 3, 'D-08 (ekonomi, payroll_view): alla tidposter');
   for (const u of ['falt', 'begransad']) {
     const d = await lasAlla(U[u], ['vift_invoices']);

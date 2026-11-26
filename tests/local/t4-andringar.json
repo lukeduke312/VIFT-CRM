@@ -1,5 +1,5 @@
 {
- "beskrivning": "T4-A (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A och T4-A-notiser; md5_t4a = T4-A-versionen av ett objekt som notisdelen ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
+ "beskrivning": "T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser och T4-B; md5_t4a = versionen i T4-A-läget och md5_t4an = versionen i läget T4-A + notisdelen, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
  "objekt": {
   "funktion:_store_direct_write_guard()": {
    "paket": "T4-A-notiser",
@@ -14,10 +14,12 @@
    "beskrivning": "T3-B + T4-A: inaktiverad roll ger inga behörigheter (stämpling)."
   },
   "funktion:_vift_ej_verkstallda()": {
-   "paket": "T4-A",
-   "andring": "ÄNDRAD (efter T3-E)",
-   "md5": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-E + T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda och borttagna ur registret."
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "135587f6c8d5b53c67d12b9762cbfaef|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-E + T4-A + T4-B: time_view_all verkställd och borttagen ur registret.",
+   "md5_t4an": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4a": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:_vift_notis_kategori(p_type text)": {
    "paket": "T4-A-notiser",
@@ -145,6 +147,138 @@
    "md5": "78ab59db85b0b00a3826de8c97ee1a75|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: tomt värde (null eller tom sträng)."
   },
+  "funktion:_vift_t4b_anspraak(p_invoices jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "659f73924d149e66385c64bac172c095|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: alla källnycklar som en icke makulerad faktura gör anspråk på."
+  },
+  "funktion:_vift_t4b_datum_ok(p text)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "eaec35a3869b97f3137110b5958e3144|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: giltigt datum ÅÅÅÅ-MM-DD (utförandedatum, VK-1)."
+  },
+  "funktion:_vift_t4b_faktura_kallor(p_invoice jsonb, p_invoices jsonb, p_wos jsonb, p_tes jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "aa7e418ec1d1e89b462e915fd5072845|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: fakturavägens källkontroll (price_unknown, included_in_fixed_price, source_not_billable, source_not_found, price_mismatch)."
+  },
+  "funktion:_vift_t4b_faktura_pris_kontroll(p_inv jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "7a9fd7acbdb55aa8773641c71895765e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: okänt försäljningspris stoppar utskick (price_unknown)."
+  },
+  "funktion:_vift_t4b_idag()": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "f359273048e0b1606d365df699ba5b10|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: dagens datum i Europe/Stockholm (standard för utförandedatum)."
+  },
+  "funktion:_vift_t4b_inkop_satta(p_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "12b26d018c0d6651990f202f0a6ee60f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: sätta/komplettera inköpspris (cost_view + cost_edit)."
+  },
+  "funktion:_vift_t4b_kalla_status(p_invoices jsonb, p_key text)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "0df510a383494fe8c20ee45da72b856b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (VK-1): fakturastatus per källrad (ofakturerad/utkast/fakturerad) ur fakturornas sourceRefs."
+  },
+  "funktion:_vift_t4b_kallrad(p_key text, p_wos jsonb, p_tes jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "654b435badbe7b38012c839012050958|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (VK-1): gemensamt radformat per källrad (material, tid, fastpris, framtida insats)."
+  },
+  "funktion:_vift_t4b_kontor(p_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "add53f0f6c8a677e62aad67bb9068d19|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: valfri befintlig prisgrupp vid tidregistrering (ao_edit, invoice_create, payroll_manage)."
+  },
+  "funktion:_vift_t4b_lage(p_ao jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "140de325f178fc4f8074bcc748a79c5e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: AO:ns debiteringsläge (fixed, hourly, unit, unknown)."
+  },
+  "funktion:_vift_t4b_material_lista(p_ao jsonb, p_new jsonb, p_perms text[], p_me text, p_now text, p_invoices jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "51485d7df542f8f7a35f6b9f3bca66b3|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: arbetsledarens hela materiallista — serverpris för nya rader, skyddade fält, fakturerade källrader låsta."
+  },
+  "funktion:_vift_t4b_ny_rad(p_ao jsonb, p_in jsonb, p_perms text[], p_me text, p_now text, p_id text)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "4fd7a9cfb35e8bd90764cc32cdc27718|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: ny materialrad med serverpris (artikel → ögonblicksbild; fritext → okänt pris)."
+  },
+  "funktion:_vift_t4b_pris(p_typ text, p_ref text, p_ctx jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "4f6740d6cf222158a78276ba7f6b3e56|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (VK-1): gemensam prisupplösning generell → kund → fastighet → avtal (vift_priceAgreements, giltighet per utförandedatum)."
+  },
+  "funktion:_vift_t4b_pris_las(p_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "b8db1b69d18633822161ba455015786e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: prisläsrätt (försäljningspris, timpris) — roller som hanterar AO, fakturerar, har cost_view, artiklar eller offerter; aldrig fältroller (D-09, D-11)."
+  },
+  "funktion:_vift_t4b_pris_satta(p_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "d74282800e70ee0631a068147ac2272c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: sätta/komplettera försäljningspris och moms (invoice_create eller cost_edit)."
+  },
+  "funktion:_vift_t4b_rad_kant(p_row jsonb, p_falt text, p_flagga text)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "e306fb23f9193c83c852581f3e8fa963|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: pris känt för en lagrad rad (uttryckligen okänt, saknat eller äldre 0 = okänt)."
+  },
+  "funktion:_vift_t4b_rad_kontroll(p_ao jsonb, p_row jsonb, p_eff text[], p_me text, p_invoices jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "e01200ca64e24afd5f4631477078ebc5|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: behörighets- och låskontroll för en materialrad (not_own_row, ao_locked, invoiced_locked)."
+  },
+  "funktion:_vift_t4b_tal(p jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "e0d79cb98a3d403087eefbacd925b72c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: tal ur JSON, annars null (okänt är aldrig 0)."
+  },
+  "funktion:_vift_t4b_tid_last(p_ao jsonb)": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "e0d7674413a2da14afd39620cc23172b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: normal tidregistrering låst på klar och låst AO (T3-B beslut 1)."
+  },
+  "funktion:_vift_t4b_tillagg_satta(p_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "3f9fe6a76949524bd59e3a9cb6bc57f1|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: markera material som tillägg på fastpris-AO (ao_edit eller invoice_create, R21)."
+  },
+  "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD",
+   "md5": "9f0826a51eb0c2ff858a3cc51d149a3b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: källraderna prövas mot sina källor under lås (okänt pris, fastpris, ej debiterbar, serverpris)."
+  },
+  "funktion:invoice_set_status(p_invoice_id text, p_status text, p_expected_revision bigint, p_actor_id text)": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD",
+   "md5": "3811ff28d903d1678417f32d53c5fa2c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: okänt försäljningspris stoppar utskick (price_unknown)."
+  },
   "funktion:notification_append(p_caller_staff_id text, p_entry jsonb, p_request_id text, p_max integer)": {
    "paket": "T4-A-notiser",
    "andring": "NY",
@@ -181,6 +315,36 @@
    "md5": "721e9845a052c7d5e703cadf31ac38a9|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T4-A: ny parameter p_klient; fältvis sammanslagning av skyddade fält och bevarade behörigheter för äldre klient. 5-parametersversionen ersatt."
   },
+  "funktion:store_write_stamp_status(p_auth_user_id uuid, p_active boolean, p_ts bigint, p_ao_id text, p_expected_revision bigint)": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T3-B)",
+   "md5": "a81d254b856939d534582c7c383dadcf|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-B: instämpling låst på klar AO (utstämpling alltid möjlig)."
+  },
+  "funktion:time_entry_correct(p_entry_id text, p_entry jsonb, p_reason text, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "c7f8e9da4328a2f71759ae11fb33c982|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (T3-B beslut 1, punkt 276): behörig (payroll_manage), loggad rättning/komplettering av tid på klar AO."
+  },
+  "funktion:time_entry_create(p_entry jsonb, p_idempotency_key text, p_client_id text, p_caller_staff_id text, p_caller_auth_id uuid, p_caller_perms text[])": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T3-B)",
+   "md5": "9a610b69325e36a5db077a83223ee207|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-B: tillåten prisgrupp (price_group_not_allowed), okänt timpris = null, låst på klar AO."
+  },
+  "funktion:time_entry_patch(p_entry_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_can_manage_others boolean)": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T3-B)",
+   "md5": "ca8fc9fcbf3d648f6f029e81f4804fca|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-B: fakturerad tidpost låst (invoiced_locked), tid på klar/låst AO låst."
+  },
+  "funktion:time_entry_soft_delete(p_entry_id text, p_idempotency_key text, p_caller_staff_id text, p_caller_can_manage_others boolean)": {
+   "paket": "T4-B",
+   "andring": "ÄNDRAD",
+   "md5": "d141c65bfe49cd72be0c96b76a9d59a5|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B: fakturerad tidpost låst (invoiced_locked), tid på klar/låst AO låst."
+  },
   "funktion:vift_caller_perms()": {
    "paket": "T4-A",
    "andring": "ÄNDRAD",
@@ -188,24 +352,46 @@
    "beskrivning": "T4-A: inaktiverad roll ger inga behörigheter (RLS)."
   },
   "funktion:vift_store_full_access(p_key text, p_perms text[])": {
-   "paket": "T4-A-notiser",
-   "andring": "ÄNDRAD (efter T4-A)",
-   "md5": "bf9535f6b86f248b89daddcd8f9d50fe|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A + notiser: hela värdet bara med läsrätt till alla skyddade fält (även skrivare), giltig behörighet, activity_log_view_all, urval per post för återkommande/projekt/avvikelser/inspektioner; vift_notifications aldrig hela listan (REST-läsning stängd).",
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T4-A-notiser)",
+   "md5": "350b59fd463d37defed588bc7b0975d3|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser + T4-B: … ; artiklar och prisgrupper i sin helhet bara med prisläsrätt.",
+   "md5_t4an": "bf9535f6b86f248b89daddcd8f9d50fe|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "429030d2146ea1997687c83213598ca4|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
-   "paket": "T4-A-notiser",
-   "andring": "ÄNDRAD (efter T4-A)",
-   "md5": "20543c3d087e2c8679d3c5fb51932438|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A + notiser: skyddade fält projiceras även för skrivare; staff_contacts_view; aktivitetslogg utan activity_log_view_all; urval per post; inga data utan giltig behörighet; vift_notifications per mottagare.",
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T4-A-notiser)",
+   "md5": "e9a0481d936ec1f5a756f12a8cf035b3|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser + T4-B: … ; artiklarnas försäljningspris och prisgruppernas timpris bara med prisläsrätt (bara aktiva grupper, namn och typ).",
+   "md5_t4an": "20543c3d087e2c8679d3c5fb51932438|postgres=X/postgres,service_role=X/postgres",
    "md5_t4a": "654d0db82ba49f00d7dabba5720c2342|postgres=X/postgres,service_role=X/postgres"
   },
+  "funktion:work_order_material_add(p_ao_id text, p_row jsonb, p_idempotency_key text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "5f172cc58e3b2e1e53b2694517ab304e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (D-19): radvis ny materialrad under lås; servern sätter id, addedBy och pris."
+  },
+  "funktion:work_order_material_remove(p_ao_id text, p_row_id text, p_expected_updated_at text, p_idempotency_key text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "a488575155a19898285b00afb439c5e8|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (D-19): radvis borttagning av materialrad under lås."
+  },
+  "funktion:work_order_material_update(p_ao_id text, p_row_id text, p_patch jsonb, p_expected_updated_at text, p_idempotency_key text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T4-B",
+   "andring": "NY",
+   "md5": "fea65e8fe40040517024a1bf9cbfd56e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T4-B (D-19): radvis ändring av materialrad under lås (egen/annans, priser med rätt, radversion)."
+  },
   "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_perms text[])": {
-   "paket": "T4-A",
-   "andring": "ÄNDRAD (efter T3-B)",
-   "md5": "52a5e9a4e5995f9929f04743d6e866b6|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-B + T4-A: accessCode och materials[].buyPrice prövas fältvis under radlåset (field_protected, ignoredFields)."
+   "paket": "T4-B",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "317debe8f783944fa74140963b57bf11|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B + T4-A + T4-B: fältets hela materiallista nekas (row_path_required); arbetsledarens lista prissätts av servern, fakturerade källrader låsta.",
+   "md5_t4an": "52a5e9a4e5995f9929f04743d6e866b6|postgres=X/postgres,service_role=X/postgres",
+   "md5_t4a": "52a5e9a4e5995f9929f04743d6e866b6|postgres=X/postgres,service_role=X/postgres"
   },
   "policy:public.store.store_direct_write_allowlist_insert": {
    "paket": "T4-A-notiser",

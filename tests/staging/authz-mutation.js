@@ -194,7 +194,9 @@ function testElement(id) {
     // ── Test-AO ─────────────────────────────────────────────────────
     const now = new Date().toISOString();
     const staffIds = [ids.falt].concat(ids.falt2 ? [ids.falt2] : []);
-    const aoIn = { id: runId + '-AO', title: '[E2E-TEST] ' + runId, status: 'klar', priority: 'normal', staff: staffIds, customerId: '', description: 'Automatiskt behörighetsprov — tas bort efter körningen.', log: [], materials: [], checklist: [], createdAt: now, updatedAt: now, e2eTest: runId };
+    /* T4-B (T3-B beslut 1): normal tidregistrering är låst på klar AO — test-AO:n är därför pågående
+       (G6 prövar dubbel create_time; G9 nekas med invoice_path_required oavsett källstatus). */
+    const aoIn = { id: runId + '-AO', title: '[E2E-TEST] ' + runId, status: 'pågående', priority: 'normal', staff: staffIds, customerId: '', description: 'Automatiskt behörighetsprov — tas bort efter körningen.', log: [], materials: [], checklist: [], createdAt: now, updatedAt: now, e2eTest: runId };
     note({ typ: 'ao', id: aoIn.id });
     const c = await req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'create_ao', ao: aoIn, idempotencyKey: runId + '-create-ao' } });
     if (c.status !== 200 || !c.body.workOrder) throw new Error('kunde inte skapa test-AO (HTTP ' + c.status + ' ' + (c.body.error || '') + ')');

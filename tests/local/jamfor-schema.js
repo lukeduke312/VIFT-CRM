@@ -99,6 +99,11 @@ const add = (typ, key, status, detalj) => {
   if (!k && t4e && status !== 'IDENTISK' && status !== 'SAMMA KOD' && process.env.T4_LAGE === 'T4-A' && t4e.md5_t4a && t4e.md5_t4a === lokalDef(typ, key)) {
     k = 'T4-A (läge före notisdelen, ej installerad i STAGING): ' + t4e.beskrivning;
   }
+  /* T4-B: läget T4-A + notisdelen (före T4-B eller efter T4-B:s rollback) godtas BARA med
+     T4_LAGE=T4-A-notiser. */
+  if (!k && t4e && status !== 'IDENTISK' && status !== 'SAMMA KOD' && process.env.T4_LAGE === 'T4-A-notiser' && t4e.md5_t4an && t4e.md5_t4an === lokalDef(typ, key)) {
+    k = 'T4-A + notisdelen (läge före T4-B, ej installerad i STAGING): ' + t4e.beskrivning;
+  }
   if (!k && t && status !== 'IDENTISK' && status !== 'SAMMA KOD') {
     const nu = lokalDef(typ, key);
     if (t.md5 === nu) k = t.paket + ' (' + t.andring + ', ej installerad i STAGING): ' + t.beskrivning;

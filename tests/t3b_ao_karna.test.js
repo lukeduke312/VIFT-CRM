@@ -227,8 +227,10 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   // Fakturaflödet: kö → underlag (invoice-write appendChecked) → status (aoBilling) → makulering/borttagning backar.
   aterstall();
   const IW = (user, body) => ef.anropa('invoice-write', { user, body });
-  const underlag = (aoId, sk) => ({ customerId: 'CU-R1', sourceAware: true, workOrderIds: [aoId], lines: [{ id: 'L-' + sk, description: 'Arbete', qty: 2, unit: 'h', unitPrice: 650, vatRate: 25, sourceRefs: [{ sourceKey: sk, workOrderId: aoId, type: 'time' }] }] });
-  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'time:TE-R3') });
+  /* T4-B (D-10, SÄK-6): källraden prövas mot sin källa. AO-A3 är en fastpris-AO (tiden ingår i fastpriset),
+     så flödet fakturerar fastpriset (fixed:AO-A3, 4 500 kr = AO:ns fixedPrice) i stället för tidposten. */
+  const underlag = (aoId, sk) => ({ customerId: 'CU-R1', sourceAware: true, workOrderIds: [aoId], lines: [{ id: 'L-' + sk, description: 'Arbete', qty: 1, unit: 'st', unitPrice: 4500, vatRate: 25, sourceRefs: [{ sourceKey: sk, workOrderId: aoId, type: 'fixed' }] }] });
+  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'fixed:AO-A3') });
   ok(s.status === 200 && s.body.invoice && s.body.invoice.id, 'flöde: arbetsledare skapar fakturaunderlag ur kön (appendChecked, atomisk väg)', s.body);
   const invId = s.body.invoice && s.body.invoice.id;
   await NEJ('aoBilling utan invoice_create (egen roll chef − invoice_create) → 403 forbidden', () => IW(U.chef_utan_faktura, { action: 'aoBilling', aoId: 'AO-A3', invoiceId: invId, mode: 'invoiced' }), { status: 403, error: 'forbidden', reason: null });
@@ -245,7 +247,7 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   a = ao('AO-A3');
   ok(a.status === 'klar' && a.invoiceId === '' && a.billingPreviousStatus === null, 'flöde: status klar, invoiceId tom, billingPreviousStatus null', a);
   // Makulering backar också.
-  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'time:TE-R3b') });
+  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'fixed:AO-A3') });
   const inv2 = s.body.invoice;
   await IW(U.chef, { action: 'aoBilling', aoId: 'AO-A3', invoiceId: inv2.id, mode: 'invoiced' });
   s = await IW(U.chef, { action: 'setStatus', invoiceId: inv2.id, status: 'makulerad', expectedRevision: inv2.revision });
@@ -325,8 +327,11 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   await patch(U.falt, 'AO-A2', { status: 'klar' });
   await JA('utstämpling efter att AO:n klarmarkerats under passet → 200', () => tid(U.falt, { id: 'TID-K', aoId: 'AO-A2', date: '2026-11-27', startTs: T1, endTs: T1 + 1800000, minutes: 30 }), ['store:vift_timeEntries', 'store:vift_workOrders', 'tabell:op_idempotency']);
   aterstall();
+  /* T4-B (T3-B beslut 1): instämpling på en KLAR AO är normal tidregistrering och låst; passet startas därför
+     medan AO-A3 är pågående (som i verksamheten), varefter den faktureras under passet. */
+  psql(db, `update public.store set value = (select jsonb_agg(case when e->>'id' = 'AO-A3' then e || '{"status":"pågående"}'::jsonb else e end) from jsonb_array_elements(value) e) where key = 'vift_workOrders'`);
   await stampa(U.falt, true, 'AO-A3', T1);
-  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'time:TE-R3') });
+  s = await IW(U.chef, { action: 'appendChecked', idempotencyKey: 'vift-v2:' + nyckel(), invoice: underlag('AO-A3', 'fixed:AO-A3') });
   await IW(U.chef, { action: 'aoBilling', aoId: 'AO-A3', invoiceId: s.body.invoice.id, mode: 'invoiced' });
   ok(ao('AO-A3').status === 'fakturerad', 'AO-A3 fakturerad medan FÄ är instämplad');
   await NEJ('ny tid på den fakturerade AO:n utan stämpling → 409 ao_locked', () => tid(U.falt, { id: 'TID-F0', aoId: 'AO-A3', date: '2026-11-27', minutes: 10 }), { status: 409, error: 'ao_locked', reason: null });
@@ -366,6 +371,12 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   const chk = (user, aoId, itemId, action) => ef.anropa('work-order-checklist-resolve', { user, body: { aoId, itemId, action } });
   const logg = (user, aoId, id) => ef.anropa('work-order-log-write', { user, body: { action: 'append_log', aoId, entry: { id, type: 'note', text: 'anteckning' } } });
   const mat = (user, aoId, materials) => patch(user, aoId, { materials });
+  /* T4-B (D-19, 2026-11-28): fältet skriver aldrig hela materiallistan (403 forbidden/row_path_required, prövas
+     nedan och i t4b_material_priser.test.js). T3-B:s regler för fältets materialrader (tilldelning, låst AO,
+     egna rader) prövas därför via de radvisa åtgärderna, med samma förväntade avslag. */
+  const matAdd = (user, aoId, row) => AW(user, { action: 'add_material', aoId, row });
+  const matUpd = (user, aoId, rowId, p) => AW(user, { action: 'update_material', aoId, rowId, patch: p });
+  const matDel = (user, aoId, rowId) => AW(user, { action: 'remove_material', aoId, rowId });
   const bild = async (user, aoId) => {
     const fd = new FormData();
     fd.append('aoId', aoId);
@@ -377,7 +388,8 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   for (const [id, nm] of [['AO-P1', 'öppen pool P1 före tagning'], ['AO-P2', 'annans pool-AO P2']]) {
     await NEJ(`W4/SEC-POOL-11/12: checklista på ${nm} → 403 not_assigned`, () => chk(U.falt, id, id + '-C1', 'done'), { status: 403, error: 'forbidden', reason: 'not_assigned' });
     await NEJ(`W5: loggpost på ${nm} → 403 not_assigned`, () => logg(U.falt, id, 'LOG-' + id), { status: 403, error: 'forbidden', reason: 'not_assigned' });
-    await NEJ(`W1: materialpatch på ${nm} → 403 not_assigned`, () => mat(U.falt, id, ao(id).materials.concat([{ id: 'M-NY', name: 'x', qty: 1 }])), { status: 403, error: 'forbidden', reason: 'not_assigned' });
+    await NEJ(`W1: materialrad på ${nm} → 403 not_assigned`, () => matAdd(U.falt, id, { name: 'x', qty: 1 }), { status: 403, error: 'forbidden', reason: 'not_assigned' });
+    await NEJ(`W1: fältets hela materiallista på ${nm} (äldre klient) → 403 row_path_required`, () => mat(U.falt, id, ao(id).materials.concat([{ id: 'M-NY', name: 'x', qty: 1 }])), { status: 403, error: 'forbidden', reason: 'row_path_required' });
     const filerFore = ef.filer.size;
     await NEJ(`W2: bilduppladdning på ${nm} → 403 not_assigned`, () => bild(U.falt, id), { status: 403, error: 'forbidden', reason: 'not_assigned' });
     ok(ef.filer.size === filerFore, `W2: ingen fil skapad (${nm})`);
@@ -392,7 +404,7 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
   ok(s.status === 200 && s.body.path && s.body.path.startsWith('AO-P1/'), 'SEC-POOL-13: efter tagning — bilduppladdning → 200', s);
   await NEJ('checklista på egen FAKTURERAD AO-A9 → 409 ao_locked', () => chk(U.falt, 'AO-A9', 'AO-A9-C1', 'done'), { status: 409, error: 'ao_locked', reason: null });
   await NEJ('loggpost på egen FAKTURERAD AO-A9 → 409 ao_locked', () => logg(U.falt, 'AO-A9', 'LOG-A9'), { status: 409, error: 'ao_locked', reason: null });
-  await NEJ('SEC-B1-08: materialrad på egen fakturerad AO-A9 → 409 ao_locked', () => mat(U.falt, 'AO-A9', ao('AO-A9').materials.concat([{ id: 'M-A9', name: 'x', qty: 1 }])), { status: 409, error: 'ao_locked', reason: null });
+  await NEJ('SEC-B1-08: materialrad på egen fakturerad AO-A9 → 409 ao_locked', () => matAdd(U.falt, 'AO-A9', { name: 'x', qty: 1 }), { status: 409, error: 'ao_locked', reason: null });
   await NEJ('bilduppladdning på egen fakturerad AO-A9 → 409 ao_locked', () => bild(U.falt, 'AO-A9'), { status: 409, error: 'ao_locked', reason: null });
   await JA('arbetsledare (ao_view_all) bockar av checklista på valfri AO → 200', () => chk(U.chef, 'AO-A8', 'AO-A8-C1', 'done'), ['store:vift_workOrders']);
   // Materialrader: fältet ändrar inte andras rader (D-19 delvis).
@@ -401,17 +413,22 @@ const nyckel = (() => { let i = 0; return (p) => (p || 't3b') + '-' + (++i) + '-
      t4a_skyddade_falt.test.js (403 field_protected; inköpspriset bevaras). */
   const fv = (l) => l.map((m) => { const x = Object.assign({}, m); delete x.buyPrice; return x; });
   const m1 = fv(ao('AO-A1').materials);
-  await NEJ('SEC-B1-05: ändra annans/äldre rad (A1-M1) → 403 forbidden/not_own_row', () => mat(U.falt, 'AO-A1', [Object.assign({}, m1[0], { qty: 99 })]), { status: 403, error: 'forbidden', reason: 'not_own_row' });
-  await NEJ('SEC-B1-05: ta bort annans/äldre rad → 403 not_own_row', () => mat(U.falt, 'AO-A1', []), { status: 403, error: 'forbidden', reason: 'not_own_row' });
-  await JA('SEC-B1-01: lägg till egen rad (befintliga orörda) → 200', () => mat(U.falt, 'AO-A1', m1.concat([{ id: 'M-EGEN', name: 'Fritext', qty: 2, unit: 'st' }])), ['store:vift_workOrders', 'tabell:op_idempotency']);
-  const egen = ao('AO-A1').materials.find((m) => m.id === 'M-EGEN');
-  ok(egen && egen.addedBy === F && egen.addedAt, 'servern sätter addedBy/addedAt på den nya raden');
-  await JA('SEC-B1-04: ändra egen rad → 200', () => mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).map((m) => m.id === 'M-EGEN' ? Object.assign({}, m, { qty: 3 }) : m)), ['store:vift_workOrders', 'tabell:op_idempotency']);
-  await JA('SEC-B1-04: ta bort egen rad → 200', () => mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).filter((m) => m.id !== 'M-EGEN')), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  await NEJ('SEC-B1-05: ändra annans/äldre rad (A1-M1) → 403 forbidden/not_own_row', () => matUpd(U.falt, 'AO-A1', m1[0].id, { qty: 99 }), { status: 403, error: 'forbidden', reason: 'not_own_row' });
+  await NEJ('SEC-B1-05: ta bort annans/äldre rad → 403 not_own_row', () => matDel(U.falt, 'AO-A1', m1[0].id), { status: 403, error: 'forbidden', reason: 'not_own_row' });
+  await NEJ('D-19 (T4-B): fältets hela lista med en ny rad (T3-klientens väg) → 403 row_path_required', () => mat(U.falt, 'AO-A1', m1.concat([{ id: 'M-EGEN', name: 'Fritext', qty: 2, unit: 'st' }])), { status: 403, error: 'forbidden', reason: 'row_path_required' });
+  s = await matAdd(U.falt, 'AO-A1', { name: 'Fritext', qty: 2, unit: 'st' });
+  ok(s.status === 200, 'SEC-B1-01: lägg till egen rad (befintliga orörda) → 200', s.body);
+  const egenId = s.body.row && s.body.row.id;
+  const egen = ao('AO-A1').materials.find((m) => m.id === egenId);
+  ok(egen && egen.addedBy === F && egen.addedAt && ao('AO-A1').materials.find((m) => m.id === m1[0].id), 'servern sätter addedBy/addedAt på den nya raden; den äldre raden orörd');
+  await JA('SEC-B1-04: ändra egen rad → 200', () => matUpd(U.falt, 'AO-A1', egenId, { qty: 3 }), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  await JA('SEC-B1-04: ta bort egen rad → 200', () => matDel(U.falt, 'AO-A1', egenId), ['store:vift_workOrders', 'tabell:op_idempotency']);
   psql(db, `update public.store set value = (select jsonb_agg(case when e->>'id' = 'AO-A1' then e || '{"staff":["${F}","${F2}"]}'::jsonb else e end) from jsonb_array_elements(value) e) where key = 'vift_workOrders'`);
-  await mat(U.falt, 'AO-A1', fv(ao('AO-A1').materials).concat([{ id: 'M-FA', name: 'Fs rad', qty: 1 }]));
-  await NEJ('FÄ2 ändrar FÄ:s rad på gemensam AO → 403 not_own_row', () => mat(U.falt2, 'AO-A1', fv(ao('AO-A1').materials).map((m) => m.id === 'M-FA' ? Object.assign({}, m, { qty: 5 }) : m)), { status: 403, error: 'forbidden', reason: 'not_own_row' });
-  await JA('FÄ2 lägger till egen rad på gemensam AO och lämnar FÄ:s rad orörd → 200', () => mat(U.falt2, 'AO-A1', fv(ao('AO-A1').materials).concat([{ id: 'M-F2', name: 'F2:s rad', qty: 1 }])), ['store:vift_workOrders', 'tabell:op_idempotency']);
+  s = await matAdd(U.falt, 'AO-A1', { name: 'Fs rad', qty: 1 });
+  const faId = s.body.row && s.body.row.id;
+  await NEJ('FÄ2 ändrar FÄ:s rad på gemensam AO → 403 not_own_row', () => matUpd(U.falt2, 'AO-A1', faId, { qty: 5 }), { status: 403, error: 'forbidden', reason: 'not_own_row' });
+  s = await matAdd(U.falt2, 'AO-A1', { name: 'F2:s rad', qty: 1 });
+  ok(s.status === 200 && ao('AO-A1').materials.find((m) => m.id === faId).qty === 1, 'FÄ2 lägger till egen rad på gemensam AO och lämnar FÄ:s rad orörd → 200');
 
   // ════════════════ Punkt 245: AO-nummer ════════════════
   aterstall();

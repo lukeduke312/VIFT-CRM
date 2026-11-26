@@ -208,6 +208,8 @@ const sorterad = (a) => Array.from(new Set(a || [])).sort().join(',');
       'las:vift_settings': 'cost_view (D-01, T4-A): intern timkostnad', 'rest:vift_settings': 'cost_view (D-01, T4-A): REST-läsning av inställningar med intern timkostnad',
       'las:vift_articles': 'cost_view (D-01, T4-A): inköpspris och påslag', 'rest:vift_articles': 'cost_view (D-01, T4-A): REST-läsning av artiklar med inköpspris',
       'anrop:material_egen': 'cost_view/cost_edit (D-01, T4-A): profilens materialanrop skickar hela listan med lagrade inköpspriser (T3-klientens form); utan cost_view 403 field_protected (oläsbart fält), med standardrollen 200 — T4-klienten skickar raderna utan inköpspris',
+      /* T4-B (2026-11-28): time_view_all verkställd (K-01). */
+      'tel': 'time_view_all (K-01, T4-B): all personals arbetstid, utan attest och löneuppgifter',
     },
     e2e_ekonomi: { /* T4-A: personal_data_view (D-13) och cost_view (D-01) verkställda. */
       'las:vift_customers': 'personal_data_view (D-13, T4-A): personnummer och privatpersoners org.nr (ROT/RUT)', 'las:vift_settings': 'cost_view (D-01, T4-A): intern timkostnad',

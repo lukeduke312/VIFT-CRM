@@ -11,6 +11,10 @@
  * står i t4-andringar.json med paket, ändring (NY/ÄNDRAD/BORTTAGEN), md5 för definition + ACL och
  * en beskrivning. jamfor-schema.js räknar dem som förklarade bara när md5 stämmer.
  *
+ * T4-B (20261128000011): kedjan byggs också UTAN T4-B (läget T4-A + notiser). Objekt som skiljer sig
+ * får paket 'T4-B' och md5_t4an (versionen i T4-A-notisläget, godtas med T4_LAGE=T4-A-notiser) när
+ * de fanns där; md5_t4a är versionen i T4-A-läget (T4_LAGE=T4-A) för objekt som ett senare paket ändrat.
+ *
  * T4-A, tilläggsdel notiser (20261128000010): kedjan byggs också UTAN notismigrationen. Objekt som
  * bara finns eller skiljer sig i den fulla kedjan får paket 'T4-A-notiser'; objekt som T4-A ändrade
  * och notisdelen ändrar igen får dessutom md5_t4a (T4-A-versionen), som jamfor-schema.js godtar när
@@ -74,6 +78,44 @@ const NOTISER = {
   store_direct_write_allowlist_update: 'T3-C + notiser (punkt 275): RESTRICTIVE UPDATE med WITH CHECK (false) — vitlistan tom.',
 };
 const NOTIS_FIL = 'migrations/20261128000010_t4a_notiser.sql';
+/* T4-B (20261128000011): material, priser och tid. */
+const T4B = {
+  _vift_t4b_pris_las: 'T4-B: prisläsrätt (försäljningspris, timpris) — roller som hanterar AO, fakturerar, har cost_view, artiklar eller offerter; aldrig fältroller (D-09, D-11).',
+  _vift_t4b_pris_satta: 'T4-B: sätta/komplettera försäljningspris och moms (invoice_create eller cost_edit).',
+  _vift_t4b_inkop_satta: 'T4-B: sätta/komplettera inköpspris (cost_view + cost_edit).',
+  _vift_t4b_tillagg_satta: 'T4-B: markera material som tillägg på fastpris-AO (ao_edit eller invoice_create, R21).',
+  _vift_t4b_kontor: 'T4-B: valfri befintlig prisgrupp vid tidregistrering (ao_edit, invoice_create, payroll_manage).',
+  _vift_t4b_tal: 'T4-B: tal ur JSON, annars null (okänt är aldrig 0).',
+  _vift_t4b_idag: 'T4-B: dagens datum i Europe/Stockholm (standard för utförandedatum).',
+  _vift_t4b_datum_ok: 'T4-B: giltigt datum ÅÅÅÅ-MM-DD (utförandedatum, VK-1).',
+  _vift_t4b_tid_last: 'T4-B: normal tidregistrering låst på klar och låst AO (T3-B beslut 1).',
+  _vift_t4b_lage: 'T4-B: AO:ns debiteringsläge (fixed, hourly, unit, unknown).',
+  _vift_t4b_pris: 'T4-B (VK-1): gemensam prisupplösning generell → kund → fastighet → avtal (vift_priceAgreements, giltighet per utförandedatum).',
+  _vift_t4b_kalla_status: 'T4-B (VK-1): fakturastatus per källrad (ofakturerad/utkast/fakturerad) ur fakturornas sourceRefs.',
+  _vift_t4b_anspraak: 'T4-B: alla källnycklar som en icke makulerad faktura gör anspråk på.',
+  _vift_t4b_rad_kant: 'T4-B: pris känt för en lagrad rad (uttryckligen okänt, saknat eller äldre 0 = okänt).',
+  _vift_t4b_kallrad: 'T4-B (VK-1): gemensamt radformat per källrad (material, tid, fastpris, framtida insats).',
+  _vift_t4b_faktura_kallor: 'T4-B: fakturavägens källkontroll (price_unknown, included_in_fixed_price, source_not_billable, source_not_found, price_mismatch).',
+  _vift_t4b_faktura_pris_kontroll: 'T4-B: okänt försäljningspris stoppar utskick (price_unknown).',
+  _vift_t4b_ny_rad: 'T4-B: ny materialrad med serverpris (artikel → ögonblicksbild; fritext → okänt pris).',
+  _vift_t4b_material_lista: 'T4-B: arbetsledarens hela materiallista — serverpris för nya rader, skyddade fält, fakturerade källrader låsta.',
+  _vift_t4b_rad_kontroll: 'T4-B: behörighets- och låskontroll för en materialrad (not_own_row, ao_locked, invoiced_locked).',
+  work_order_material_add: 'T4-B (D-19): radvis ny materialrad under lås; servern sätter id, addedBy och pris.',
+  work_order_material_update: 'T4-B (D-19): radvis ändring av materialrad under lås (egen/annans, priser med rätt, radversion).',
+  work_order_material_remove: 'T4-B (D-19): radvis borttagning av materialrad under lås.',
+  time_entry_correct: 'T4-B (T3-B beslut 1, punkt 276): behörig (payroll_manage), loggad rättning/komplettering av tid på klar AO.',
+  work_order_patch: 'T3-B + T4-A + T4-B: fältets hela materiallista nekas (row_path_required); arbetsledarens lista prissätts av servern, fakturerade källrader låsta.',
+  _vift_ej_verkstallda: 'T3-E + T4-A + T4-B: time_view_all verkställd och borttagen ur registret.',
+  time_entry_create: 'T3-B + T4-B: tillåten prisgrupp (price_group_not_allowed), okänt timpris = null, låst på klar AO.',
+  time_entry_patch: 'T3-B + T4-B: fakturerad tidpost låst (invoiced_locked), tid på klar/låst AO låst.',
+  time_entry_soft_delete: 'T4-B: fakturerad tidpost låst (invoiced_locked), tid på klar/låst AO låst.',
+  store_write_stamp_status: 'T3-B + T4-B: instämpling låst på klar AO (utstämpling alltid möjlig).',
+  invoice_append_checked: 'T4-B: källraderna prövas mot sina källor under lås (okänt pris, fastpris, ej debiterbar, serverpris).',
+  invoice_set_status: 'T4-B: okänt försäljningspris stoppar utskick (price_unknown).',
+  vift_store_full_access: 'T3-D + T4-A + notiser + T4-B: … ; artiklar och prisgrupper i sin helhet bara med prisläsrätt.',
+  vift_store_project: 'T3-D + T4-A + notiser + T4-B: … ; artiklarnas försäljningspris och prisgruppernas timpris bara med prisläsrätt (bara aktiva grupper, namn och typ).',
+};
+const T4B_FIL = 'migrations/20261128000011_t4b_material_priser_tid.sql';
 
 /* Oförklarade objekt (utan T4-registret) i en kedja, med md5 som jamfor-schema.js räknar. */
 function las(opts) {
@@ -102,26 +144,32 @@ function las(opts) {
 
 {
   const full = las({});
-  const t4a = las({ utelamna: [NOTIS_FIL] });
+  const t4an = las({ utelamna: [T4B_FIL] });
+  const t4a = las({ utelamna: [T4B_FIL, NOTIS_FIL] });
   const t3reg = JSON.parse(fs.readFileSync(path.join(__dirname, 't3-andringar.json'), 'utf8')).objekt;
   const objekt = {};
   for (const [k, { x, md5: m }] of Object.entries(full)) {
     const namn = x.key.replace(/\(.*$/, '').replace(/^public\.store\./, '');
+    const iT4an = t4an[k];
     const iT4a = t4a[k];
-    const notis = !iT4a || iT4a.md5 !== m;
+    const t4b = !iT4an || iT4an.md5 !== m;
+    const notis = !t4b && (!iT4a || iT4a.md5 !== m);
+    const paket = t4b ? 'T4-B' : notis ? 'T4-A-notiser' : 'T4-A';
+    const fore = t4b ? (iT4an ? (iT4a && iT4a.md5 === iT4an.md5 ? 'T4-A' : 'T4-A-notiser') : null) : notis ? (iT4a ? 'T4-A' : null) : null;
     objekt[k] = {
-      paket: notis ? 'T4-A-notiser' : 'T4-A',
-      andring: t3reg[k] && x.status !== 'SAKNAS LOKALT' ? 'ÄNDRAD (efter ' + (iT4a && notis ? 'T4-A' : t3reg[k].paket) + ')'
-        : iT4a && notis ? 'ÄNDRAD (efter T4-A)'
+      paket,
+      andring: fore ? 'ÄNDRAD (efter ' + fore + ')'
+        : t3reg[k] && x.status !== 'SAKNAS LOKALT' ? 'ÄNDRAD (efter ' + t3reg[k].paket + ')'
         : x.status === 'EXTRA LOKALT' ? 'NY' : x.status === 'SAKNAS LOKALT' ? 'BORTTAGEN (ersatt av ny signatur)' : 'ÄNDRAD',
       md5: m,
-      beskrivning: (notis ? NOTISER[namn] : T4A[namn]) || '(beskrivning saknas)',
+      beskrivning: (t4b ? T4B[namn] : notis ? NOTISER[namn] : T4A[namn]) || '(beskrivning saknas)',
     };
-    if (iT4a && notis) objekt[k].md5_t4a = iT4a.md5;
+    if (iT4an && iT4an.md5 !== m) objekt[k].md5_t4an = iT4an.md5;
+    if (iT4a && iT4a.md5 !== m) objekt[k].md5_t4a = iT4a.md5;
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4-A (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A och T4-A-notiser; md5_t4a = T4-A-versionen av ett objekt som notisdelen ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T4 (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A, T4-A-notiser och T4-B; md5_t4a = versionen i T4-A-läget och md5_t4an = versionen i läget T4-A + notisdelen, för objekt som ett senare T4-paket ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)' || v.md5 === null);
     if (utan.length) { console.log('FAIL beskrivning eller md5 saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }
