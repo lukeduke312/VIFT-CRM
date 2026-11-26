@@ -54,9 +54,10 @@ module.exports = [
       t.assert(ed.ikryssade.join() === (await s.eval(() => state.roles.find((r) => r.id === 'chef').permissions.slice().sort().join())), 'rolleditorn kryssar exakt standardrollen chefs behörigheter');
       /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit är verkställda och inte längre märkta. */
       /* T4-B (2026-11-28): time_view_all är verkställd (K-01) och inte längre märkt. */
-      t.assert(['export_data=verkställs i T4-F', 'ao_plan_own=verkställs i AO-etappen', 'rondering_utfor=verkställs i T4-D', 'objects_access_assigned=verkställs i T4-C', 'export_personal_data=verkställs i T4-F'].every((x) => ed.markta.includes(x)) && ed.markta.length === 5
-        && !ed.markta.some((x) => /^(cost_view|cost_edit|personal_data_view|bankgiro_edit|time_view_all)=/.test(x)),
-        'de fem ej verkställda behörigheterna är märkta med paketet (cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda i T4-A, time_view_all i T4-B): ' + ed.markta.join(', '));
+      /* T4-C (2026-11-28): objects_access_assigned är verkställd (D-05) och inte längre märkt. */
+      t.assert(['export_data=verkställs i T4-F', 'ao_plan_own=verkställs i AO-etappen', 'rondering_utfor=verkställs i T4-D', 'export_personal_data=verkställs i T4-F'].every((x) => ed.markta.includes(x)) && ed.markta.length === 4
+        && !ed.markta.some((x) => /^(cost_view|cost_edit|personal_data_view|bankgiro_edit|time_view_all|objects_access_assigned)=/.test(x)),
+        'de fyra ej verkställda behörigheterna är märkta med paketet (cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda i T4-A, time_view_all i T4-B, objects_access_assigned i T4-C): ' + ed.markta.join(', '));
       t.assert(['customer_view', 'personal_data_view', 'bankgiro_edit', 'export_personal_data', 'objects_access_assigned', 'staff_contacts_view', 'activity_log_view_all'].every((p) => ed.rutor.includes(p)), 'katalogen innehåller även customer_view, personal_data_view, bankgiro_edit, export_personal_data, objects_access_assigned och (T4-A) staff_contacts_view och activity_log_view_all');
       // En roll med en behörighet som inte finns i katalogen: visas och sparas utan förlust.
       const roles = t.fake.get('roles'); roles.push({ id: 'egen_okand', label: 'Egen med okänd', isBuiltin: false, active: true, permissions: ['dashboard_view', 'framtida_behorighet'] }); t.fake.set('roles', roles);
@@ -165,7 +166,7 @@ module.exports = [
     },
   },
   {
-    id: 'T3E-06', world: WORLD, module: 'Säkerhet', name: 'Ej verkställda behörigheter (tillägget i BESLUT-2026-11-28): begransad med de ej verkställda (export_data, objects_access_assigned m.fl.; T4-B: time_view_all verkställd och borttagen ur listan) får exakt samma meny, sidor, AO, personaluppgifter och lokala cache som utan dem',
+    id: 'T3E-06', world: WORLD, module: 'Säkerhet', name: 'Ej verkställda behörigheter (tillägget i BESLUT-2026-11-28): begransad med de ej verkställda (export_data, rondering_utfor m.fl.; T4-B: time_view_all och T4-C: objects_access_assigned verkställda och borttagna ur listan) får exakt samma meny, sidor, AO, personaluppgifter och lokala cache som utan dem',
     async run(t) {
       const ejv = require('../fake-backend.js').T3E_EJ_VERKSTALLDA;
       const fanga = async () => {

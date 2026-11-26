@@ -24,6 +24,7 @@ const vm = require('vm');
    activity_log_view_all, inaktiverad roll, åtkomst per post (t4a-regler.js = serverns regler). */
 const T4A = require('./t4a-regler');
 const T4B = require('./t4b-regler'); // T4-B (2026-11-28): material, priser och tid
+const T4C = require('./t4c-regler'); // T4-C (2026-11-28): åtkomstinformation (objects_access_assigned), D-23
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -206,7 +207,7 @@ const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'activ
 const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
 /* T3-E (20261128000008): ej verkställda behörigheter (= _vift_ej_verkstallda()) räknas inte när
    servern avgör intern/extern — de ger ingen åtkomst förrän T4. */
-const T3E_EJ_VERKSTALLDA = T4B.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda; T4-B: time_view_all
+const T3E_EJ_VERKSTALLDA = T4C.EJ_VERKSTALLDA.slice(); // T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda; T4-B: time_view_all; T4-C: objects_access_assigned
 const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'].concat(T3E_EJ_VERKSTALLDA);
 const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
   'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
@@ -315,6 +316,7 @@ class FakeSupabase {
     this.stamp = new Map();
     this.files = new Map();
     this.sensitive = new Map();
+    this.sensitiveAudit = []; // T4-C: sensitive_access_audit (status, fält, väg; aldrig värden)
     this.pushSubs = [];
     this.outbox = [];       // e-post/push/pdf som skulle ha skickats
     this.calls = [];        // alla anrop
@@ -682,8 +684,18 @@ class FakeSupabase {
         // så att e2e-real.js städsteg kan provas lokalt. Finns aldrig i LIVE.
         case 'e2e-test-cleanup': return this.e2eTestCleanup(body, perms);
         case 'get-sensitive-fields': {
-          if (!this.has(perms, 'objects_sensitive')) return DEFINITE(403, 'forbidden');
-          return { status: 200, body: Object.assign({ accessCode: '', keyInformation: '', accessInformation: '' }, this.sensitive.get((body && (body.objectId || body.propertyId))) || {}) };
+          /* T4-C: sensitive_fields_read — objects_sensitive, eller objects_access_assigned på egen
+             tilldelad aktiv AO (och pass när rondering_utfor är verkställd); varje uttag en revisionsrad. */
+          const a = T4C.atkomst(body, perms, me && me.id, this.get('workOrders') || [], this.get('ronderingspass') || [], T3E_EJ_VERKSTALLDA);
+          if (a.status === 400) return DEFINITE(400, 'missing_fields');
+          const mal = { objectId: a.objId, propertyId: a.objId ? null : a.propId };
+          if (!a.ok) {
+            this.sensitiveAudit.push(Object.assign({ status: 'denied', staffId: me && me.id, fields: [], detail: a.reason }, mal));
+            return a.reason === 'not_assigned' ? REGEL(403, 'forbidden', 'not_assigned') : DEFINITE(403, 'forbidden');
+          }
+          const ut = T4C.svar(this.sensitive.get(a.objId || a.propId) || {}, a.via);
+          this.sensitiveAudit.push(Object.assign({ status: 'allowed', staffId: me && me.id, fields: T4C.FALT.filter((f) => ut[f]), detail: a.via }, mal));
+          return { status: 200, body: ut };
         }
         case 'set-sensitive-fields': {
           if (!this.has(perms, 'objects_sensitive')) return DEFINITE(403, 'forbidden');
@@ -793,6 +805,7 @@ class FakeSupabase {
           const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? value : s0, body.key === 'vift_roles' ? value : r0, me && me.id, this.users);
           if (deny) return deny;
         }
+        this._t4cRadering(body.key, cur, value, me);
         this.store.set(body.key, clone(value)); this.touch();
         return { status: 200, body: { ok: true, hash: sha(value), current: this.t3dProject(body.key, clone(value), perms, me) } };
       }
@@ -878,6 +891,7 @@ class FakeSupabase {
           const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? arr : s0, body.key === 'vift_roles' ? arr : r0, me && me.id, this.users);
           if (deny) return deny;
         }
+        this._t4cRadering(body.key, this.store.get(body.key), arr, me);
         this.store.set(body.key, arr); this.touch();
         /* T3-D: svaret projiceras som en läsning; en konflikt mot en post som anroparen inte får se
            lämnar inte ut serverns värde. */
@@ -1335,6 +1349,19 @@ class FakeSupabase {
      ('har_avvikelser' om någon punkt har anmärkning, annars 'slutfört')
      och sätter completedBy. bulkCreate skapar flera och returnerar
      created[]. SQL-källan finns inte i repot — se E2E-rapporten. */
+  /* T4-C (D-23): permanent radering (elementet borta ur listan) tar bort den känsliga raden i samma
+     skrivning, med en revisionsrad utan värden. Arkivering/inaktivering behåller den. */
+  _t4cRadering(key, fore, efter, me) {
+    if (key !== 'vift_propertyObjects' && key !== 'vift_properties') return;
+    T4C.borttagna(fore, efter).forEach((id) => {
+      if (!this.sensitive.has(id)) return;
+      const rad = this.sensitive.get(id) || {};
+      this.sensitive.delete(id);
+      this.sensitiveAudit.push({ status: 'allowed', action: 'write', staffId: me && me.id, objectId: key === 'vift_propertyObjects' ? id : null,
+        propertyId: key === 'vift_properties' ? id : null, fields: T4C.FALT.filter((f) => rad[f]), detail: 'permanent_delete (' + key + ', D-23)' });
+    });
+  }
+
   ronderingWrite(b, perms, me) {
     if (!this.has(perms, 'ao_view_all')) return DEFINITE(403, 'forbidden');
     const passes = this.get('ronderingspass') || [];

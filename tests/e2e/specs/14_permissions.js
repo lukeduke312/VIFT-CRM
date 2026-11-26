@@ -30,8 +30,12 @@ module.exports = [
       t.assert(inv.status === 403, 'fakturarad nekas: ' + JSON.stringify(inv));
       const esc = await call(s, 'store-key-write', { action: 'writeMerge', key: 'vift_roles', upserts: [{ id: 'personal', data: { id: 'personal', label: 'x', permissions: ['all'] }, previous: t.fake.get('roles').find((r) => r.id === 'personal') }] });
       t.assert(esc.status === 403, 'självupphöjning via roller nekas: ' + JSON.stringify(esc));
-      const sens = await call(s, 'get-sensitive-fields', { propertyId: 'OBJ-001' });
-      t.assert(sens.status === 403, 'portkod nekas: ' + JSON.stringify(sens));
+      /* T4-C (D-05): standardrollen personal har objects_access_assigned — åtkomstinformation bara för
+         fastighet/objekt på EGEN tilldelad AKTIV AO (AO-001 pågår på OBJ-001); övriga nekas (not_assigned). */
+      let sens = await call(s, 'get-sensitive-fields', { propertyId: 'OBJ-001', workOrderId: 'AO-001' });
+      t.assert(sens.status === 200, 'portkod för egen aktiv AO:s fastighet lämnas ut (T4-C, loggat): ' + JSON.stringify(sens));
+      sens = await call(s, 'get-sensitive-fields', { propertyId: 'OBJ-002' });
+      t.assert(sens.status === 403, 'portkod för fastighet utan egen aktiv AO nekas (OBJ-002 har bara en klar AO): ' + JSON.stringify(sens));
       const te = await call(s, 'time-entries-list', {});
       t.assert(te.staff && te.staff.every((x) => x === 'ST-002'), 'bara egna tidposter: ' + JSON.stringify(te.staff));
       const att = await call(s, 'ao-time-write', { action: 'attest_time', entryId: t.fake.get('timeEntries')[0].id, attested: true, idempotencyKey: key() });
