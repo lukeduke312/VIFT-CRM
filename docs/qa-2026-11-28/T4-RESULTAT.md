@@ -5,6 +5,12 @@ Styrande beslut: `BESLUT-2026-11-28.md`, avsnittet "Tillägg efter T3-leveransen
 Verifieringsnivån är **lokalt verifierad**: lokal PostgreSQL 16.15, Edge Functions körda i Node, webbläsartester mot den simulerade servern.
 Ingenting är installerat eller verifierat i STAGING. LIVE är inte kontaktad. PostgreSQL 17 och Deno kunde inte hämtas i miljön (paketkällorna saknar DNS-uppslag); de kvarstår som releasevillkor.
 
+### Läge och återupptagning
+
+- **T4-A** (inkl. tilläggsdel notiser): lokalt klar (vift-v2 `2060b8f`, VIFT-CRM `64a4e2b`); notisbesluten fastställda 2026-11-28 (läsläckan P1).
+- **T4-B**: lokalt klar — se avsnittet "T4-B" nedan (commits och testsiffror där). Installeras i samma serveromgång som T4-A (samlad plan: T4-B §11).
+- **Nästa:** T4-C → T4-D → T4-E → T4-F i oförändrad ordning, därefter samlad regression och T4-leveransen.
+
 ---
 
 ## T4-A – skyddade fält och projektion (B5 + B1-projektion)
@@ -242,7 +248,7 @@ Läsande analys i `t4a_skyddade_falt.test.js` (STAGING:s sju roller ur T3-E:s l�
 4. AO-ekonomi (`fixedPrice`) läses av `ao_edit`, `ao_view_all`, `invoice_*` och `cost_view`; fält får debiteringskategorin. (Godta; D-06.)
 5. Inaktiverad roll ger inga behörigheter (tidigare ignorerades `active`), även för superadmininvarianten. (Godta; A-kontroll före installation.)
 6. En kunds typbyte från privatperson med lagrat org.nr nekas utan `personal_data_view` (annars skulle numret bli läsbart). (Godta.)
-7. Notiserna: **genomfört lokalt i befintligt paket T4-A** (tilläggsdel, migration `20261128000010`, installeras i samma serveromgång som T4-A + T4-B) i stället för ett eget paket "T4-N". Klassning: P2, med läsläckan som P1 om notiserna innehåller kunduppgifter (offertnotiserna innehåller kundnamn). (Godta placeringen; ditt beslut om klassningen. Se tilläggsdelens "Beslut som behövs".)
+7. Notiserna: **genomfört lokalt i befintligt paket T4-A** (tilläggsdel, migration `20261128000010`, installeras i samma serveromgång som T4-A + T4-B) i stället för ett eget paket "T4-N". Klassning: P2, med läsläckan som P1 om notiserna innehåller kunduppgifter (offertnotiserna innehåller kundnamn). (Godta placeringen; ditt beslut om klassningen. Se tilläggsdelens "Beslut som behövs".) **Fastställt 2026-11-28** (BESLUT-2026-11-28 "Beslut under T4"): placeringen och förslagen godkända, läsläckan P1.
 8. Inspektioner (ingen AO-koppling) bara för kundregistrets läsare. (Godta.)
 
 ### Ändrade filer
@@ -439,9 +445,9 @@ Inga negativa tester har försvagats eller tagits bort.
 - `offer-respond` skriver fortfarande `offer_approved` direkt med service_role (utanför RPC:n, villkorad uppdatering); mottagarna är personal med `offer_manage`/`all` och posterna har `userId`, så de projiceras korrekt. Att flytta den till `notification_append`-mönstret är inte nödvändigt för punkt 7.
 - Ingen hastighetsgräns per avsändare: flödet begränsas av typregeln (åt andra bara `ao_assigned` med verklig tilldelning), dubblettskyddet och listans tak.
 
-**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+**Beslut (FASTSTÄLLDA 2026-11-28 av Lucas Samuelsson, BESLUT-2026-11-28.md "Beslut under T4": förslagen nedan godkända, läsläckan klassad P1):**
 1. Placering i befintligt paket T4-A (tilläggsdel, migration `20261128000010`) i stället för ett eget paket "T4-N". (Godta; följer punkt 7 "befintliga paket".)
-2. Klassning: P2; läsläckan P1 eftersom offertnotiserna innehåller kundnamn. (Ditt beslut; åtgärdat lokalt oavsett.)
+2. Klassning: P2; läsläckan P1 eftersom offertnotiserna innehåller kundnamn. (**Fastställt:** läsläckan P1.)
 3. Åt andra får en klient bara skapa `ao_assigned`, och bara när mottagaren är tilldelad AO:n; texten sätts av servern. (Godta; AP-D.)
 4. Egna påminnelser bara till sig själv, för alla med giltig roll. (Godta.)
 5. Superadmin (`all`) läser bara egna notiser. (Godta; notiser är personliga.)
@@ -470,3 +476,270 @@ Inga negativa tester har försvagats eller tagits bort.
 - `aed7285` tester (fake-backend, e2e NOTIF-02–06, NOTIF-01, T3C-07)
 - `e66e8a0` e2e-rapport (266/0/0)
 - dokumentcommit: se `git log` efter `e66e8a0`
+
+---
+
+## T4-B – material, priser och tid (B1 resten, SÄK-6, SÄK-11:s prisdel, D-08–D-11, D-19)
+
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den lokala
+STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat eller verifierat
+i STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes (STAGING:s rollregister ur T3-E:s
+läsning 2026-11-28 används i införandeanalysen). T4-B installeras i **samma serveromgång som T4-A och
+notisdelen**, direkt efter `20261128000010`; §11 nedan kompletterar T4-A:s plan till **en samlad
+T4-A + B-omgång**.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Radvisa materialoperationer (D-19, R13–R15) | Nya RPC:er `work_order_material_add/update/remove` (via `ao-time-write` `add_material`/`update_material`/`remove_material`) under radlås. **Servern sätter** id, `addedBy`, `addedAt`, `updatedAt/By`, utförandedatum (`performedDate`, standard i dag, aldrig i framtiden) och pris. Fältet (`ao_material`) ändrar och tar bort bara **egna** rader på tilldelad AO (403 `not_own_row`/`not_assigned`); `ao_edit` alla. Låst AO → 409 `ao_locked`. Radversion: `expectedUpdatedAt` → 409 `stale_write`. Idempotens bunden till aktör och innehåll. **Fältets hela materiallista nekas** i `work_order_patch` (403 `forbidden`/`row_path_required`, SEC-B1-06). |
+| Serverbaserad prissättning (SÄK-6 P1, D-09, D-10) | Artikelrad → **ögonblicksbild** av försäljnings- och inköpspris och moms ur den gemensamma prisupplösningen (generell → kund → fastighet → avtal); klientens priser ignoreras och redovisas (`ignoredFields`). Fritext → **okänt** pris (`sellPrice: null`, `sellPriceUnknown: true`, samma för inköp) — **aldrig 0 kr**; en artikel med pris 0 (schemats standard) ger också okänt. Pris får anges/kompletteras bara av `invoice_create`/`cost_edit` (försäljning, moms) respektive `cost_view`+`cost_edit` (inköp) — annars 403 `field_protected`. Komplettering av okänt pris loggas i AO:ns logg (utan belopp, SEC-B1-13). Arbetsledarens **hela lista** (v3.4/T3/T4-A-klient) godtas men nya rader prissätts av servern, serverägda fält behåller serverns värde och ett **0 eller tomt pris från klientens "\|\| 0" på en rad med okänt pris ignoreras** — ingen 0-kronorsrad. Historiska priser bevaras: ändrad artikel eller prisgrupp ändrar inga befintliga rader/tidposter (R24). |
+| Fakturavägen (D-10, R20, R21) | `invoice_append_checked` prövar varje källrad mot sin källa i det **gemensamma radformatet** under låsen: okänt pris → 409 `price_unknown`; material eller tid som **ingår i fastpris** → 409 `included_in_fixed_price` (material debiteras separat bara om det uttryckligen markerats som **tillägg** `extra` av `ao_edit`/`invoice_create`); ej debiterbar källa → 409 `source_not_billable`; saknad källa/borttagen AO → 409 `source_not_found`; radens à-pris ≠ källans serverpris → 409 `price_mismatch`; AO med äldre icke källmedveten faktura → 409 `source_collision`. `invoice_set_status` stoppar **utskick** av ett underlag med en rad utan numeriskt à-pris eller markerad `priceUnknown` (409 `price_unknown`); utkastet kan kompletteras av ekonomi (`lineUpdate`) och skickas sedan. Atomisk väg och D-07/G9 bevarade (`aoBilling`, `work_order_billing_set` oförändrade). |
+| Fakturerade källrader låsta (T3-B beslut 2) | En materialrad eller tidpost som en **icke makulerad** faktura gör anspråk på (även utkast) får inte ändras eller tas bort — radvis, via arbetsledarens hela lista, `patch_time`, `delete_time` eller `correct_time` → 409 `invoiced_locked`. Val och motivering: **neka** ändringen (inte markera utkastet inaktuellt) — utkastet blir aldrig felaktigt, beslutet är atomiskt under samma lås som anspråket (exakt en vinner, prövat ×20), och användaren tar bort raden ur utkastet för att släppa anspråket (då kan raden ändras och tas in igen). Nya rader, checklista, logg och dokumentation på klar men ej fakturerad AO tillåts (blir nya källor i kön; utkastet ändras inte). |
+| Tid (D-11, SÄK-11:s prisdel, R22–R24) | `time_entry_create` sätter `hourRate` från en **tillåten** prisgrupp: fältroller (utan `ao_edit`/`invoice_create`/`payroll_manage`) bara en aktiv grupp och AO:ns grupp när AO:n har en (403 `forbidden`/`price_group_not_allowed`); okänd grupp nekas för alla. **Legitim utstämpling faller aldrig** på prisgruppen: AO:ns grupp används och valet redovisas. Utan grupp är timpriset **okänt** (`hourRate: null`, `hourRateUnknown: true`), aldrig 0. `patch_time` från fältet: samma regel i EF:en. |
+| Tidlås på klar AO (T3-B beslut 1, punkt 276) | `time_entry_create`, `time_entry_patch`, `time_entry_soft_delete` och **instämpling** (`store_write_stamp_status`) nekas på `klar` (och som förut låst) AO med 409 `ao_locked`; **legitim utstämpling** (pågående stämpling på samma AO och starttid) slutförs alltid, även över midnatt och sommartidsskiftet. Ny **`time_entry_correct`** (`ao-time-write` `correct_time`): behörig (`payroll_manage`), **loggad** rättning eller komplettering av glömd tid på klar AO med **obligatorisk orsak** (400 `reason_required`), revisionsrad i posten (`corrections[]`: vem, när, typ, orsak, före/efter) och loggpost i AO:n (utan belopp); timpriset sätts av servern. Fakturerade (`invoiced_locked`) och attesterade (`attested_locked`) poster och fakturerad/låst AO (`ao_locked`) ändras inte här — de kräver fakturans respektive attestens korrigeringsflöde. Återöppningsutredningen: §9. |
+| `time_view_all` verkställd (K-01, D-08) | `time-entries-list`: `time_view_all` ger **all personals** tidposter; en annans post lämnas ut **utan löneuppgifter** (vitlista: id, AO, personal, datum, tider, minuter, kommentar, prisgrupp, debiterbar …; inga attestfält, inga revisionsrader). `payroll_view` krävs fortfarande för lön/attest per person (oförändrat). `time_view_all` ger ingen annan verksamhetsdata (prövat: `readAllWithHashes` identiskt med samma roll utan den). Borttagen ur `_vift_ej_verkstallda()`, `standardroller.json` (`ejVerkstallda`, version `t4b-2026-11-28`, skripten omgenererade), fake-backendens lista och rolleditorns `_PERM_EJ_VERKSTALLD`. |
+| Projektion av priser (D-09, D-11, SEC-B1-09/10, SEC-B2-01) | Prisläsrätt (`_vift_t4b_pris_las` = TS `canReadPrices`): `ao_edit`, `ao_view_all`, `invoice_view`, `invoice_create`, `cost_view`, `article_manage`, `offer_manage` (eller `all`). Utan den: inga `materials[].sellPrice` i `work-orders-list` och alla AO-svar, inga `articles.sellPrice`, inga tidposters `hourRate` (även egna) i `time-entries-list` och tidsvaren, och **prisgrupperna bara som aktiva (valbara) grupper med namn och typ** — utan timpris och beskrivning; REST-raderna för artiklar och prisgrupper döljs. |
+| Prisgrupper (punkt 247/G12) | Aktivera/inaktivera väntar på serverbekräftelse (`confirmPersist`) och rullas tillbaka vid avslag; beskedet visas först efter bekräftelsen (e2e T4B-05). C-5-projektionen av prisgrupper modelleras i fake-backenden. |
+| Klient (F13) | Inga belopp för fält i artikelväljare, materialformulär och -rader, stämpla ut, Tid och AO-detaljens tidrader; inga `\|\| 0`/`\|\| 250` för priser (okänt visas "Pris saknas"); `ProfitabilityService` utan påhittade standardvärden (intern timkostnad saknas → "Saknas", TB markerat **ofullständigt** utan procent). Materialrader skrivs radvis. `?v=` höjt. |
+| VK-1-arkitekturen (punkt 272) | Gemensam prisupplösning och gemensamt radformat/fakturastatus per källrad (material, tid, fastpris, **framtida insats**) som materialvägen och fakturavägen använder; grupperade rader, delfakturering och atomiskt anspråk per registrering prövade med injicerade insatsregistreringar. Inga vyer, inget registreringsgränssnitt. §8. |
+| Paritet (SÄK-17) | `tests/e2e/t4b-regler.js` (ny, identisk i båda repona) speglar T4-B; fake-backenden följer reglerna. 38 nya scenarier (B-*), alla lika; totalt 233 scenarier, 231 lika, 2 kända (KEY-01, AUTH-02, oförändrade). |
+| Rollback | `supabase/rollback/T4-B/rollback_t4b.sql` (genererad ur kedjan utan T4-B). Installera → rollback → installera prövat; T4-B + notiser + T4-A + T3-E + T3-D + T3-C + T3-B i omvänd ordning = exakt STAGING-facit. Ingen data ändras. |
+
+### 1. Inventering före ändringen
+
+- **Materialvägen (SÄK-6):** fältet och arbetsledaren skrev hela `materials` via `patch_ao`; klientens `sellPrice`/`buyPrice` sparades (fältet kunde sätta 1 kr på en artikel för 100 kr), fritext fick `|| 0` (okänt = 0 kr), T3-B:s `_vift_ao_material_merge` skyddade bara andras rader, och T4-A bara inköpspriset. Ingen radversion; id från klienten (`'M'+Date.now()`).
+- **Priser till fältet:** artiklarnas försäljningspris (`vift_store_project`), prisgruppernas timpris (`vift_priceGroups` var "else true" för alla), materialradernas försäljningspris i `work-orders-list` och tidposternas `hourRate` (även egna) lämnades ut; klienten visade dem i artikelväljaren, stämpla ut, Tid och AO-detaljen.
+- **Fakturavägen:** `invoice_append_checked` prövade bara källkollision; à-priset kom från klienten (`m.sellPrice || 0`, `t.hourRate || 0`), fastpris-AO fakturerades med fastpriset **och** fältmaterialet (klientens V34-regel), okänt pris = 0-kronorsrad, och en materialrad i ett utkast kunde ändras efteråt (utkastet blev inaktuellt).
+- **Tid:** `time_entry_create` satte timpriset ur valfri grupp (även inaktiv), 0 utan grupp, och tillät normal tid på `klar` AO; `time_view_all` gav inget (bara `payroll_view` såg andras tid).
+- **Klient:** `ProfitabilityService.internalRate()` `|| 250`, materialsummor och kön med `|| 0`; prisgruppernas aktivera/inaktivera sparade utan serverbekräftelse (`persist()` + direkt besked).
+
+### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000011_t4b_material_priser_tid.sql` | **Nya (24, bara service_role):** regelfunktionerna `_vift_t4b_pris_las`, `_pris_satta`, `_inkop_satta`, `_tillagg_satta`, `_kontor`, `_tal`, `_idag`, `_datum_ok`, `_tid_last`, `_lage`, **`_vift_t4b_pris`** (prisupplösningen), **`_vift_t4b_kallrad`**, **`_vift_t4b_kalla_status`**, `_anspraak`, `_rad_kant`, `_faktura_kallor`, `_faktura_pris_kontroll`, `_ny_rad`, `_material_lista`, `_rad_kontroll`; RPC:erna `work_order_material_add/update/remove` och `time_entry_correct`. **Ändrade med samma signatur (10):** `work_order_patch`, `time_entry_create`, `time_entry_patch`, `time_entry_soft_delete`, `store_write_stamp_status`, `invoice_append_checked`, `invoice_set_status`, `vift_store_full_access`, `vift_store_project`, `_vift_ej_verkstallda`. **STOP:** T4-A och notisdelen installerade, T4-B inte installerad, md5 för varje ersatt funktion = föregående version (repokedjan). Rör inga data. |
+| `functions/_shared/vift-auth.ts` | `PRICE_READ_PERMS`, `canReadPrices`, `projectTimeEntry` (timpris och time_view_all-vitlistan), `projectWorkOrder` utan `materials[].sellPrice` (och framtida `insatser[].unitPrice`) utan prisläsrätt; `aoRuleError` känner `invoiced_locked` (409). |
+| `functions/ao-time-write/index.ts` | `add_material`, `update_material`, `remove_material`, `correct_time`; tidposter och materialrader i alla svar projiceras; `create_ao` sätter okänt försäljningspris för rader utan prissättningsrätt eller pris ≤ 0; `patch_time` prövar fältets prisgrupp (`price_group_not_allowed`); felkoder `invalid_row`, `invalid_reference`, `reason_required`. |
+| `functions/time-entries-list/index.ts` | `time_view_all` + `projectTimeEntry`. |
+| `functions/invoice-write/index.ts` | Felkoder `price_unknown`, `price_mismatch`, `included_in_fixed_price`, `source_not_billable`, `performed_date_required`, `source_not_found` (409). |
+| `rollback/T4-B/rollback_t4b.sql` | Genererad av `tests/local/t4b-rollback.js`. |
+| `manual/t3e_standardroller/standardroller.json` + A–D | Version `t4b-2026-11-28`: `ejVerkstallda` utan `time_view_all`; rollernas behörigheter oförändrade. Skripten omgenererade. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | `20261128000011` som klass "ny – ej installerad i STAGING" direkt efter notisdelen (MIG-1: installerad 37, ny 11). |
+
+**Låsordning** (en gemensam ordning för alla T3/T4-vägar, inga cykler): `vift_invoices` → `vift_timeEntries` → `vift_workOrders` → `vift_activityLog` → `vift_lastChanged`. Material-RPC:erna och `work_order_patch` (med `materials`) tar `vift_invoices` FOR SHARE före `vift_workOrders` FOR UPDATE (samma som `work_order_billing_set`); tidvägen `vift_invoices` FOR SHARE → `vift_timeEntries` FOR UPDATE → `vift_workOrders`; fakturavägen `vift_invoices` FOR UPDATE → `vift_timeEntries`/`vift_workOrders` FOR SHARE (som `invoice_set_status`). Artiklar, prisgrupper och prisöverenskommelser läses utan lås (MVCC). Alla regelkontroller görs efter låsen, i samma transaktion som skrivningen.
+
+**Felkoder** (BEHORIGHETSMATRIS §4, nya): 403 `forbidden`/`row_path_required`; 409 `invoiced_locked`, `price_unknown`, `price_mismatch`, `included_in_fixed_price`, `source_not_billable`, `source_not_found`, `performed_date_required`; 400 `invalid_row`, `reason_required`. Återanvända: 403 `not_own_row`, `not_assigned`, `field_protected`, `price_group_not_allowed` (fanns i katalogen, nu verkställd); 409 `ao_locked`, `stale_write`, `attested_locked`, `idempotency_key_conflict`; 400 `invalid_reference`, `invalid_source_ref`.
+
+### 3. Klientändringar (VIFT-CRM)
+
+- `AOTimeSyncService.js` (`?v=14`): `addMaterial`/`updateMaterial`/`removeMaterial`; `invoiced_locked`, `invalid_row`, `invalid_reference`, `reason_required` är slutgiltiga avslag.
+- `WorkOrderService.js` (`?v=33`): materialrader radvis (preliminär lokal ändring; serverns projicerade rader ersätter de lokala; slutgiltigt avslag backar), `canReadPrices`/`canSetSalePrice`/`canSetBuyPrice`; priser skickas bara med prissättningsrätt; `materialTotal` utan okända priser.
+- `WorkOrderDetailPage.js` (`?v=98`): artikelväljare, materialformulär (dokumentationsfält, inga prisfält för fält), materialrader ("Pris saknas", "Tillägg", inga knappar på andras rader för fält), tidrader och prisgruppsval utan belopp utan prisläsrätt; inga `|| 0`; lönsamhetskortet visar "Ofullständig" och "Saknas".
+- `TimeService.js` (`?v=25`): `priceGroupOptions` (fält: aktiva grupper, AO:ns grupp; belopp bara med prisläsrätt). `TimePage.js` (`?v=20`): stämpla ut, manuell tid och redigering använder den.
+- `BillingQueueService.js` (`?v=12`): D-10 — material på fastpris-AO är ingen egen källa om det inte är tillägg; okänt pris (null) är en åtgärdsorsak, aldrig 0; `_ensureMaterialIds` skriver bara med `ao_edit`.
+- `InvoicesPage.js` (`?v=42`): okänt belopp visas "Pris saknas"; intern ekonomi visar "Ofullständig".
+- `ProfitabilityService.js` (`?v=4`): inga påhittade standardvärden (F13).
+- `PageShells.js` (`?v=198`): prisgruppernas aktivera/inaktivera med `confirmPersist` (G12); `_PERM_EJ_VERKSTALLD` utan `time_view_all`.
+- Ingen redesign, inga nya vyer.
+
+### 4. Fake-backend och paritet (SÄK-17)
+
+- `tests/e2e/t4b-regler.js` (ny, identisk i båda repona) speglar SQL-reglerna (prisupplösning, källrad, fakturastatus, ny rad, hela listan, radkontroll, projektioner). `fake-backend.js` (båda repona, synkade): radvisa materialåtgärder, `correct_time`, fältets hela lista nekas, arbetsledarens lista prissätts, `create_time`/`patch_time`/`delete_time`/stämpling med tidlås, prisgrupp och okänt timpris, `time-entries-list` med `time_view_all` och projektion, fakturavägens källkontroll och utskicksstopp, C-5-projektion av artiklar och **prisgrupper**.
+- `vift-v2/tests/local/lib/paritet.js`: 38 nya scenarier (B-ADD/UPD/RM/PATCH, B-TID, B-STAMP, B-TEL, B-PG, B-REST, B-WOL, B-FAKT, B-INVLOCK, B-SEND, B-KORR); de äldre MAT-scenarierna ger nu 403 `row_path_required` i både replik och fake.
+
+### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+#### 5.1 Resultat
+
+**Ny testfil `vift-v2/tests/t4b_material_priser.test.js` (testgruppen `material_pricing`): 152/0.** Innehåll:
+- BASLINJE mot T4-A + notisdelen (`2060b8f`, `git archive`) på samma data: se §6 (8 fynd).
+- Radvisa materialoperationer: SEC-B1-01..05, 08, 13, 14 med exakt status/error/reason och KS (`vift_workOrders`, `vift_timeEntries`, `vift_invoices`, `vift_articles`, `vift_priceGroups`, `vift_activityLog`, `op_idempotency`, `stamp_status`), indata (antal, benämning, okänd artikel, framtida datum), ej tilldelad, roller utan `ao_material`, idempotens (omförsök → samma rad; annat innehåll → 409).
+- Hela listan: SEC-B1-06 (fält, även oförändrad lista), arbetsledarens lista (serverpris på nya rader, 0 över okänt ignoreras, komplettering med rätt, `field_protected` utan rätt, serverägda fält bevaras).
+- Projektion för 14 användare (fält, begränsad, tom, egna roller, `time_view_all`, admin, chef, ekonomi, `ao_edit`, `article_manage`, `invoice_view`, säljare med `ao_view_all`) i `readAllWithHashes`, `work-orders-list`, `time-entries-list` och REST.
+- `time_view_all`: chef ser all tid utan attest/revisioner; egen roll med bara `time_view_all` ser all tid utan belopp och **ingen annan data** (identiskt med samma roll utan behörigheten); ekonomi oförändrad; SEC-TID-07/08; registret och speglingen.
+- Tid: SEC-B2-03/04/05, okänt timpris, ögonblicksbild för material (R24), tidlås på klar/fakturerad AO (create, patch, delete, flytt, instämpling), legitim utstämpling över midnatt och sommartidsskiftet på en AO som blivit klar, checklista och logg på klar AO.
+- Rättning (punkt 276): komplettering och rättning med revisionsrad och AO-logg; `reason_required`, fält och arbetsledare nekas, `attested_locked`, `ao_locked` på fakturerad AO, `stale_write`.
+- Fakturavägen: SEC-B1-15/16, tid på fastpris, `price_mismatch`, `source_not_found`, `source_not_billable`, `invalid_source_ref`, tillägg (R21), `invoiced_locked` (radvis, hela listan, borttagning, tid patch/delete/rättning), anspråket släpps när raden tas bort ur utkastet, utskicksstopp och komplettering.
+- VK-1: prisupplösningen i fyra nivåer med giltighet och moms, tjänst utan pris = okänt, gemensamt radformat (material/tid/insats), grupperad rad, dubbelfakturering per registrering, olika à-pris i grupp, okänt pris och saknat utförandedatum på insats, tid i insatsläge = intern.
+- Grants (bara service_role; authenticated 42501), RPC utan identitet → `forbidden`.
+- **Samtidighet** (egna anslutningar): ×20 FÄ lägger till samtidigt som AL tar bort en annan rad → båda effekterna består (SEC-B1-07); ×20 två ändringar av samma rad med samma radversion → exakt en vinner (`stale_write`); ×20 prisändring samtidigt som raden tas in i ett underlag → exakt en vinner (`price_mismatch` eller `invoiced_locked`), utkastet aldrig inaktuellt; 20 samtidiga tillägg → alla 20 sparas; ×20 två samtidiga rättningar av samma tidpost → exakt en, en revisionsrad.
+- **Gamla klienter:** fältets hela lista med "|| 0" → 403 utan 0-kronorsrad; klientens `hourRate`/gruppnamn ignoreras; gammal faktureringskö med 0-kronorsrad → `price_unknown`; v3.4:s fastprisregel → `included_in_fixed_price`; installationsfönstret (T4-A:s EF mot T4-B-databasen).
+- **Affärsflöden:** offert → AO (avtalat materialpris följer med), `create_ao` utan prisrätt, fakturakö → underlag → AO fakturerad → skickad → makulerad → AO backad, import/återkommande, stämpling, checklista och klarmarkering, lönsamhet (ekonomi ser TB-underlag).
+- **Ingen breddning:** för 13 användare (≈990 nycklar/svar) och STAGING:s sju roller är varje skillnad mot T4-A-koden beslutad (§10).
+- **Rollback:** installera → rollback (schemat = läget efter notisdelen med `T4_LAGE=T4-A-notiser`, 0 oförklarade; data oförändrade; T4-A-klientens väg fungerar på T4-B-data) → installera → STOP vid andra körning; STOP utan notisdelen och vid drift i en ersatt funktion; omvänd ordning hela vägen = STAGING-facit utan dataändring.
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 37/37 testfiler gröna, 1 883 godkända kontroller, 0 fel** (slutkörning efter commit `3bb0874`). Nya: `t4b_material_priser` 152/0. Ändrade och gröna: `t3b_ao_karna` 174/0, `t3e_standard_roles` 94/0, `t3e_installation` 59/0, `t4a_skyddade_falt` 138/0, `t4a_notiser` 93/0, `replica_build` 41/0, `paritet_fake_kopia` 234/0, `staging_tools` 44/0, `migrationskedja` (108 identiska, 117 förklarade, 0 oförklarade), `migrationsmappning` 18/0; registret `t4-andringar.js` PASS (66 objekt), `t4b-rollback.js` PASS. En första körning under arbetet gav 29/36 med förväntade, förklarade avvikelser (§5.2) som rättades. Webbläsartesterna i `browser/` hoppades över (SKIP_BROWSER=1) och räknas inte som godkända; `staging_e2e_real` kör Playwright och ingår.
+
+**VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 729 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 234/0 (233 scenarier, 231 lika, 2 kända: KEY-01, AUTH-02), `rollnamn_guard` 17/0, `staging_tools` 40/0.
+
+**E2E (Playwright mot den simulerade servern):** nya T4B-01–08 (`tests/e2e/specs/43_t4b_material_priser.js`) i riktad körning: 8/8. Hela e2e-sviten: se nästa rad (slutkörning).
+
+Inga negativa tester har försvagats eller tagits bort.
+
+#### 5.2 Ändrade äldre tester (varje ändring förklarad; inget negativt fall borttaget)
+
+| Test | Ändring | Skäl |
+|---|---|---|
+| `t4a_skyddade_falt`, `t4a_notiser` | Prövar T4-A-paketet **så som det levererades**: kedjan utan `20261128000011` (schemajämförelse `T4_LAGE=T4-A-notiser`) och Edge Functions ur T4-A-commiten `2060b8f`; rollbacksektionernas ominstallation godtar att bara T4-B:s objekt saknas; registret i T4-A-läget innehåller `time_view_all` | T4-B ändrar samma vägar avsiktligt; samspelet och hela kedjan prövas i `t4b_material_priser` |
+| `t3b_ao_karna` | Fakturaflödet fakturerar fastpriset (`fixed:AO-A3`, 4 500 kr) i stället för tidposten på fastpris-AO:n; fältets materialregler (W1, SEC-B1-01/04/05/08, FÄ2) prövas via de radvisa åtgärderna med samma förväntade avslag, och hela listan prövas uttryckligen (403 `row_path_required`); utstämplingsfallet startar passet medan AO:n är pågående | D-10 (tid ingår i fastpris), D-19 (hela listan nekas för fält), T3-B beslut 1 (instämpling på klar AO låst) |
+| `t3e_standard_roles` | SEC-CUST-05 och SEC-TID-06 prövar nu exakt den beslutade åtkomsten (tidigare "verkningslös nu") | `time_view_all` verkställd |
+| `t3e_installation` (steg 4) | `tel` för e2e_arbetsledare → chef tillagd i förklaringslistan | `time_view_all` (K-01) |
+| `replica_build` | 11 nya migrationer; T4-B:s 34 registrerade objekt; grants även för T4-B:s funktioner | Ny migration |
+| `tests/local/t4-andringar.js`, `jamfor-schema.js` | Registret byggs ur tre kedjor (hela, utan T4-B, utan T4-B och notiser); paketet `T4-B`, `md5_t4an` (läget T4-A + notiser) och `md5_t4a`; `T4_LAGE=T4-A-notiser` | Samma mönster som T3-/T4-A-registret |
+| `paritet.js` MAT-01/02, T4-MAT-* | Oförändrade scenarier; utfallen är nu 403 `row_path_required` i både replik och fake (T4-MAT-NY robust mot att raden saknas) | D-19 |
+| `tests/staging/authz-read.js`, `authz-mutation.js` (båda repona) | R2: `time_view_all` får se andras tid men utan löneuppgifter; test-AO:n är `pågående` (G6 prövar create_time) | K-01; T3-B beslut 1 |
+| VIFT-CRM e2e MAT-01 | Fältet lägger till material utan prisfält (raden får okänt pris på servern); arbetsledaren anger pris och moms | D-09/D-10 — tidigare satte fältet försäljningspriset (exakt SÄK-6-bristen) |
+| VIFT-CRM e2e PERM-02 | Arbetsledaren får all personals tid men inga löneuppgifter i andras poster (tidigare "bara egna") | K-01 (`time_view_all` verkställd) |
+| VIFT-CRM e2e AOD-07/08 | Förväntat antal tidrader för arbetsledaren 5 (alla) i stället för 1 (egna) | K-01 |
+| VIFT-CRM e2e T3E-01, T3E-06 | Fem ej verkställda behörigheter (tidigare sex); T3E-06:s namn utan `time_view_all` | `time_view_all` verkställd |
+
+### 6. Baslinjefynd, vända
+
+Bevisade i oförändrad kod (T4-A + notisdelen, `2060b8f`) på samma data i `t4b_material_priser.test.js` och vända i samma test:
+
+| Baslinje (T4-A-koden) | Godkänt säkerhetstest (T4-B) |
+|---|---|
+| **SÄK-6 (P1):** fältet sätter försäljningspriset själv (1 kr i stället för artikelns 100 kr) via hela materiallistan | SEC-B1-01/03 (E, P, S): servern sätter priset, klientens ignoreras; SEC-B1-06: hela listan nekas (E, S, K) |
+| **D-10:** fritext utan pris lagras som 0 kr och faktureras som en 0-kronorsrad | SEC-B1-02 (okänt, null + flagga), SEC-B1-15 (`price_unknown`) (E, P, S, K) |
+| **D-10:** fastpris-AO faktureras med fastpriset och fältmaterialet separat (dubbeldebitering) | SEC-B1-16 (`included_in_fixed_price`), R21 tillägg (E, S, K) |
+| **D-09/D-11:** fältet läser försäljningspris (artiklar, AO:ns materialrader) och timpris (prisgrupper, egna tidposter) | SEC-B1-09/10, SEC-B2-01 (E, R, S, K) |
+| **T3-B beslut 1:** fältet registrerar normal tid på klar AO | 409 `ao_locked` (E, S, K); rättning via `correct_time` |
+| **D-11:** fältet väljer en inaktiv prisgrupp (ingen kontroll) | SEC-B2-04 `price_group_not_allowed` (E, S, K) |
+| **T3-B beslut 2:** en materialrad i ett fakturautkast kan ändras (utkastet blir inaktuellt) | 409 `invoiced_locked` (E, P ×20, S, K) |
+| **K-01 (funktion):** `time_view_all` inte verkställd — arbetsledaren ser bara egen tid | SEC-TID-06 (E, S, K) |
+
+`baslinje_sakerhet` (historisk källa fb71f26) oförändrad.
+
+### 7. SÄK och D efter T4-B
+
+- **Lokalt åtgärdade:** SÄK-6 (P1); SÄK-11:s prisdel (tillåten prisgrupp, okänt ≠ 0); B1 (fritext, okänt inköpspris, komplettering av behörig); D-08 (`time_view_all`, K-01); D-09; D-10 (okänt ≠ 0, utskicksstopp, fastpris och tillägg, serverpris); D-11 (gruppnamn utan belopp, servern validerar och sätter priset, historik); D-19 (radvisa RPC:er, egna rader, hela listan nekas för fält); Ö4 (via D-11); punkt 247 (prisgrupper, G12 — punkten därmed klar lokalt); punkt 276 serverdelen; T3-B beslut 1 och 2; F13; SÄK-17 för T4-B:s vägar (38 scenarier).
+- **Delvis:** punkt 270 (källkontroll, okänt pris och "redan fakturerad" stoppas nu av servern; åtgärdsorsakerna attest/fel kund i kön oförändrade); punkt 272 (arkitekturen gjord, VK-1a/b i AO-etappen).
+- **Öppna:** SÄK-1 (T4-F), SÄK-7 tilldelningsvägen (T4-C), SÄK-14 (T4-D); UI för rättning av tid (punkt 276, AO-etappen); korrigeringsflöde för fakturerade och attesterade tidposter (kreditering/omattest: T4-E respektive löneflödet).
+
+### 8. VK-1-kompatibilitet (punkt 272; inga vyer, inget registreringsgränssnitt)
+
+**Byggt nu (server, lokalt verifierat):**
+
+| VK-1-krav | Arkitekturval i T4-B | Där |
+|---|---|---|
+| Tillfälle, styck, m², löpmeter och andra enheter | Enheten är fri text (≤ 20 tecken) på varje registrering; inget enhetsregister i koden; prisupplösningen bär enhet per pris | `_vift_t4b_ny_rad`, `_vift_t4b_pris` |
+| Flera insatser och flera registreringar av samma insats på samma AO | Varje registrering är en egen rad med eget id och egen källnyckel (`insats:<AO>:<rad>`, som `material:` och `time:`) | `_vift_t4b_kallrad` |
+| Obligatoriskt faktiskt utförandedatum | `performedDate` på varje rad (material: standard i dag, aldrig i framtiden; insats: **krävs** för fakturering, annars `performed_date_required`) | `_vift_t4b_ny_rad`, `_vift_t4b_kallrad` |
+| Kund-, fastighets- och avtalsspecifika priser | En gemensam prisupplösning: generell (artikel/prisgrupp/tjänst) → kund → fastighet → avtal, mest specifik giltig på utförandedatumet vinner; överenskommelser i `vift_priceAgreements` (`scope`, `scopeId`, `type`, `ref`, `unitPrice`, `vatRate`, `unit`, `validFrom`, `validTo`, `active`) | `_vift_t4b_pris` (materialvägen och tidvägen använder den) |
+| Historiska prissnapshots och momssatser | Pris, inköpspris, moms och priskälla (`priceSource`, `priceSourceId`) kopieras till raden vid registreringen; ändrad artikel/prisgrupp/överenskommelse ändrar inga befintliga rader | R24-testerna |
+| Spårbarhet utförd insats ↔ fakturarad | Fakturaraden bär `sourceRefs[]` med källnyckeln; fakturastatus per källrad härleds (`ofakturerad`/`utkast`/`fakturerad`) | `_vift_t4b_kalla_status` |
+| Individuell eller grupperad fakturering per period | En fakturarad kan bära flera källor (grupperad per tjänst och period) — alla med samma serverpris, annars `price_mismatch` | `_vift_t4b_faktura_kallor` |
+| Delfakturering utan att AO avslutas | Fakturering per källrad, ingen statuskrav på AO:n; AO markeras fakturerad först när inga ofakturerade källor finns (klientens reconcile, oförändrad) | `invoice_append_checked` |
+| Atomiskt skydd mot dubbelfakturering per registrering | Anspråket per källnyckel prövas under `vift_invoices`-låset (`source_collision`, `duplicate_source_key`); källraden låst när den gjorts anspråk på (`invoiced_locked`) | `invoice_append_checked`, `_vift_t4b_rad_kontroll` |
+| Tid för intern uppföljning utan automatisk dubbeldebitering | Tid debiteras bara i löpande läge (`timpris`/`prisgrupp`); i fastpris ingår den (`included_in_fixed_price`) och i ett framtida insatsläge (`priceType` `insats`/`enhet`/`tillfalle`) är den intern (`source_not_billable`) | `_vift_t4b_lage`, `_vift_t4b_kallrad` |
+| Fältpersonal utan belopp | Projektion av alla belopp utan prisläsrätt (även framtida `insatser[].unitPrice`) | `projectWorkOrder` |
+
+**AO-etappen bygger på detta (punkt 273–274, ej byggt nu):** registreringsvägen för insatser (`work_order_insats_add/update/remove` efter mönstret i `work_order_material_*`, servern sätter pris via `_vift_t4b_pris('service', …)`), insatskatalogen (`vift_services`, generellt pris) och skrivvägen/UI för `vift_priceAgreements`, mobilregistrering utan belopp, fakturaunderlag per registrering/grupperat i klienten, delfakturering i kön, klockslag, utförd av, kommentar och bilder per registrering. Prövat lokalt med insatsrader injicerade direkt i databasen (VK-1-blocket i testet).
+
+### 9. Återöppningsutredning (punkt 276, T3-B beslut 1)
+
+- **Finns det en återöppningsfunktion?** I klienten finns ingen "återöppna" för en `klar` AO: "Byt status" visas bara för levande statusar, "Återaktivera" bara för `avbruten` (→ nytt/planerad/pågående). På servern kan `ao_edit` sätta status `klar` → `pågående` via `patch_ao` (`work_order_patch`, ao_edit-grenen), utan särskild loggning; `fakturerad` kan bara backas av faktureringsmotorn (`aoBilling restore`).
+- **Kan den återanvändas för glömd tid?** Inte som säker väg: återöppning kräver `ao_edit` (inte ekonomi), öppnar AO:n för **all** normal registrering under fönstret (även andras), skriver över `completedAt/By` vid ny klarmarkering, loggar inte orsaken och fungerar inte för fakturerad AO.
+- **Byggt i stället:** `time_entry_correct` (`correct_time`) — uttrycklig behörighet (`payroll_manage`), obligatorisk orsak, revisionsrad i posten och loggpost i AO:n, timpris från servern, nekar fakturerade/attesterade poster och fakturerad/låst AO. AO:ns status påverkas inte.
+- **Kvar till AO-etappen (punkt 276):** UI för rättning/komplettering (dialog med orsak i Tid/AO-detaljen); om arbetsledaren också ska få rätta (se beslut 2 nedan). Den befintliga återöppningen (ao_edit `klar` → `pågående`) är oförändrad och fortsatt en verksamhetsfunktion, inte en rättningsväg.
+
+### 10. Införandeplan per STAGING-roll (läsande analys, ingen ändring i STAGING)
+
+För STAGING:s sju roller (provkonto byter roll i båda replikerna) är varje skillnad mellan T4-A-koden och T4-B beslutad; ingen roll får mer. Antal skillnader per roll: admin 0, e2e_arbetsledare 0, e2e_ekonomi 0, qa_p2_avgransad 0, v7_sakerhetstest 0, **e2e_falt 6** och **e2e_begransad 5** (försäljningspris och timpris borttagna i AO, tidposter, artiklar och prisgrupper; inaktiva prisgrupper dolda; REST-raden för prisgrupper dold; fältets hela materiallista nekas). Konsekvens vid installationen: STAGING:s fältkonton kan inte längre lägga till material med en **gammal** klient (403 `row_path_required`) förrän klienten laddats om — klientpaketet installeras därför i samma omgång (§11). Ingen roll tappar åtkomst till något annat. `time_view_all` finns inte i någon STAGING-roll (bara i standardrollen `chef`, som inte är installerad i STAGING).
+
+### 11. Installationsplan och rollback — samlad omgång T4-A + notisdelen + T4-B (beskrivs, körs inte)
+
+**Förutsättningar:** separat GO; T3-A–T3-E installerade; **en** serveromgång för `20261128000009` → `20261128000010` → `20261128000011` med EF:erna och klientpaketet i samma fönster.
+
+**Backup (tillägg till T4-A §11 och notisdelens §10):** definitionerna av de tio funktioner T4-B ersätter (md5 = STOP-värdena i migrationen); JSON-kopia med sha256 av `vift_workOrders`, `vift_timeEntries`, `vift_invoices`, `vift_articles`, `vift_priceGroups`; EF-backup av `ao-time-write`, `time-entries-list`, `invoice-write`, `work-orders-list` (+ `_shared/vift-auth.ts`).
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | Som T4-A och notisdelen, plus: md5 av T4-B:s tio ersatta funktioner = STOP-värdena; antal AO per `priceType`; antal materialrader med `sellPrice` 0/saknat (blir "okänt" i tolkningen, inga data ändras); antal tidposter med `hourRate` 0 på löpande AO; antal fakturautkast med källrader (de låser sina källor från installationen); öppna stämplingar på `klar` AO (utstämplingen fungerar; ingen ny instämpling) |
+| 2. Databas | `20261128000009`, `20261128000010`, `20261128000011` var och en i egen transaktion, i den ordningen. Ingen `db push`, ingen `migration repair` |
+| 3. Edge Functions, direkt efter steg 2 | T4-A:s sju + `store-key-write` (notisdelen) + T4-B: `ao-time-write`, `time-entries-list`, `invoice-write`, `work-orders-list` med `_shared/vift-auth.ts` (en bunt, samma `_shared`) |
+| 4. Klient | Samma klientpaket (`tools/build-staging-package.sh` från HEAD; `?v=` höjt för T4-A, notisdelen och T4-B) |
+| 5. Storage | Ingen ändring |
+| 6. Efterkontroll (V6, läsande) | md5 av nya/ändrade funktioner = `tests/local/t4-andringar.json`; per testkonto: SEC-B1-09/10 och SEC-B2-01 (fältet ser inga priser i `readAllWithHashes`, `work-orders-list`, `time-entries-list`, REST); SEC-TID-06/09; T4-A:s och notisdelens kontroller. Skrivande SEC-B1-01..05/08, SEC-B1-13, SEC-B2-03 och fakturaflaggan med ett märkt testunderlag (SEC-B1-15) bara på märkta test-AO/testartiklar efter separat GO |
+
+**Fönstret mellan steg 2 och 3** (gamla EF:er mot T4-B-databasen; prövat): fältets hela materiallista nekas redan i RPC:n (403 `row_path_required`) och `add_material` finns inte (400 `unknown_action`) — fältet kan inte registrera material under fönstret; tid, stämpling och fakturering följer redan de nya reglerna i RPC:erna; **`time-entries-list` och AO-svaren lämnar fortfarande ut priser till fältet** (projektionen ligger i EF:en) tills steg 3. Fönstret ska vara minuter.
+
+**Fönstret mellan steg 3 och 4** (gamla klienter i Service Worker-cachen): §12.
+
+**Rollback (ingen data skrivs över), omvänd ordning:** 1) föregående EF-versioner för `ao-time-write`, `time-entries-list`, `invoice-write`, `work-orders-list` (+ `_shared`) och föregående klientpaket; 2) `supabase/rollback/T4-B/rollback_t4b.sql` (återställer de tio funktionerna exakt, tar bort T4-B:s 24 nya; rör ingen tabell och ingen rad); 3) notisdelens rollback (§10 i tilläggsdelen); 4) T4-A:s rollback (§11); 5) vid behov T3-E-, T3-D-, T3-C- och T3-B-rollbacken. Data som skapats efter installationen är giltig för den äldre koden: materialrader med `sellPrice: null` och flaggor (den äldre klienten visar "Saknar försäljningspris" i kön och kan inte fakturera dem utan komplettering — inga 0-kronorsrader), `performedDate`, `extra`, `updatedBy` (ignoreras), tidposter med `hourRate: null`/`hourRateUnknown`/`corrections` (den äldre kön visar "Saknar timpris"). Prövat: efter rollback fungerar T4-A-klientens väg på T4-B-data. JSON-kopiorna återläses bara vid ett separat beslut om ett datafel.
+
+### 12. Gammal klient (v3.4, T3, T4-A i Service Worker-cache) mot ny server
+
+| Åtgärd | v3.4-klient | T3- och T4-A-klient | Följd |
+|---|---|---|---|
+| Läsning (`work-orders-list`, `time-entries-list`, `readAllWithHashes`) | Projicerade värden: fältet får inga priser; prisgrupper utan timpris | Samma | Ingen breddning; gamla vyer visar "0 kr"/tomt där beloppet saknas (presentationsfel, inget läckage) tills omladdning |
+| Fältets materialrad (hela listan, "\|\| 0"-priser) | 403 `row_path_required` (definitivt avslag; raden försvinner lokalt vid nästa synk, felmeddelande) | Samma | **Inga rader förstörs, inga priser sätts, ingen 0-kronorsrad.** Fältet kan inte lägga till material förrän omladdning; servern skyddar |
+| Arbetsledarens materialformulär (hela listan) | Godtas; nya rader serverprissätts; 0 över okänt ignoreras (`ignoredFields`); prisändring med prisrätt godtas | Samma | Inga 0-kronorsrader; okända priser förblir okända |
+| Material eller tid i ett fakturautkast | 409 `invoiced_locked` (v3.4 och T3 behandlar okänd 409 som tillfällig och försöker igen begränsat antal gånger; ingen dataförlust) | T4-A: samma | Ändringen nekas, utkastet förblir korrekt |
+| `create_time` med klientens `hourRate` | Ignoreras; servern sätter grupps pris; utan grupp okänt (null) | Samma | Inget klientpris lagras |
+| Stämpla ut med en annan prisgrupp än AO:ns | Utstämplingen slutförs med AO:ns grupp (`ignoredFields: ['priceGroupId']`) | Samma | Utfört arbete går aldrig förlorat |
+| Normal tid eller instämpling på klar AO | 409 `ao_locked` (definitivt i T3/T4-A; v3.4 som felmeddelande) | Samma | Rättning via `correct_time` (servern; UI i AO-etappen) |
+| Faktureringskö med okänt pris som 0 kr / fastpris + material (v3.4-regeln) | 409 `price_unknown` / `included_in_fixed_price` — ingen faktura skapas | Samma | Kön visar felet; omladdning ger T4-B-kön (okänt = åtgärdsorsak, fastpris-material ingen källa) |
+| Prisgrupp aktivera/inaktivera | Sparar via `write` som förut (besked före bekräftelse) | Samma | Serverns svar avgör; presentationsfel tills omladdning |
+| Nya felkoder | Visas som generellt fel | Samma | – |
+
+Skyddet ligger på servern; manuell omladdning behövs inte för skyddet, bara för att fältet ska kunna registrera material igen. Service Workern är network-first och `?v=` är höjt.
+
+### 13. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §5 (`material_pricing` = `t4b_material_priser`, `sim_parity`, fakturaunderlag med okänt pris i `invoice-write` lokalt) |
+| Negativa tester: rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS) i alla negativa EF-fall; RPC-fall med felmeddelande |
+| Atomiska samtidighetskontroller | Ja | Kontrollerna i RPC:erna under en gemensam låsordning; fem ×20-fall med egna anslutningar (exakt en vinner där det ska, inget tappas) |
+| Ingen oavsiktligt utökad informationsåtkomst | Ja | 13 användare och sju STAGING-roller: varje skillnad beslutad (avsmalning eller `time_view_all`) |
+| Verksamhetskritiska flöden | Ja | Offert → AO, fakturakö → underlag → status → backning, import/återkommande, stämpling (även midnatt/sommartid), checklista, material, lönsamhet; run-all och e2e |
+| Avgränsade commits | Ja | Server, tester, klient, tester/e2e, e2e-rapport, dokument |
+| Prövad rollback | Ja | Installera → rollback → installera, STOP, omvänd ordning = STAGING-facit |
+| Faktisk verifieringsnivå i masterplanen | Ja | SÄK-6, SÄK-11, D-08–D-11, D-19, B1, Ö4, 247, 270, 272, 276, F13, T4-raden: "lokalt verifierad"/"delvis" |
+| PG17 och Deno | Nej (miljön) | Kvarstår som releasevillkor |
+
+**GO-kriterier T4-B (testplanen §6):** okänt ≠ 0 överallt — **ja** (material, tid, kö, lönsamhet, faktura); fältet ser inga belopp — **ja** (E, R, S, K); fakturaunderlag med okänt pris stoppas — **ja** (skapande och utskick); ingen dubbeldebitering vid fastpris — **ja** (material och tid; tillägg uttryckligen).
+
+### 14. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- Gamla klienter: fältet kan inte lägga till material förrän omladdning (§12).
+- `invoice_line_update` kan fortfarande ändra à-priset på en källrad i ett **utkast** (ekonomins justering, oförändrat); `price_mismatch` prövas vid skapandet. Utskick stoppas bara för okänt pris.
+- Prisöverenskommelser (`vift_priceAgreements`) och insatser saknar skrivväg (AO-etappen); prövade med data injicerade i databasen.
+- Fakturerade och attesterade tidposter kan inte rättas alls utan fakturans korrigeringsflöde (T4-E) respektive attestens (omattest i löneflödet); `time_entry_correct` nekar dem.
+- `readAllWithHashes` ger hash av hela servervärdet (som T4-A).
+- Fake-backenden modellerar fortfarande inte C-5 för fakturor och offerternas interna fält (T4-E).
+
+**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+1. Prisläsrätt = `ao_edit`, `ao_view_all`, `invoice_view`, `invoice_create`, `cost_view`, `article_manage`, `offer_manage` (`reports_view`, `customer_manage`, `sales_manage`, `recurring_manage` ensamma ger inte priser). (Godta; samma mängd som D-06 utvidgad med artikel- och offertansvar.)
+2. Rättning av tid i efterhand kräver `payroll_manage` (ekonomi, admin); arbetsledaren nekas. (Ditt beslut: godta, eller ge `ao_edit` kompletteringsrätt, eller inför en uttrycklig behörighet `time_correct` i AO-etappen.)
+3. Normal tidregistrering, ändring och borttagning av tid är låst på `klar` AO för **alla** roller, även `payroll_manage` — de använder `correct_time`. Tills UI finns (AO-etappen) kan ekonomi inte rätta tid på klar AO i klienten. (Godta som restriktivt; alternativet är att låta `patch_time` från `payroll_manage` gå igenom med automatisk revisionsrad.)
+4. En källrad i ett fakturautkast låses (nekas) i stället för att utkastet markeras inaktuellt. (Godta; atomiskt och enklast att förstå.)
+5. Fritext får pris bara från `invoice_create`/`cost_edit`; artikelrader alltid serverpris vid registrering (justeras sedan radvis med rätt). Ett manuellt pris 0 räknas som känt bara när det satts radvis av en behörig. (Godta.)
+6. `create_ao` (offert → AO, import) behåller klientens försäljningspris bara från en roll med prissättningsrätt och bara > 0; annars okänt. (Godta.)
+7. Fältets prisgruppsval begränsas till AO:ns grupp när AO:n har en. (Godta; D-11 "bara tillåtna grupper".)
+8. `time_view_all` ger inte `hourRate` för andras poster utan prisläsrätt (chef har `cost_view`). (Godta.)
+
+### Ändrade filer
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`):
+- nya: `supabase/migrations/20261128000011_t4b_material_priser_tid.sql`; `supabase/rollback/T4-B/rollback_t4b.sql`; `tests/t4b_material_priser.test.js`; `tests/local/t4b-rollback.js`; `tests/e2e/t4b-regler.js`;
+- ändrade: `supabase/functions/{_shared/vift-auth.ts, ao-time-write, time-entries-list, invoice-write}/index.ts`; `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`; `supabase/manual/t3e_standardroller/{standardroller.json, A–D}`; `tests/local/{t4-andringar.js, t4-andringar.json, jamfor-schema.js, lib/paritet.js}`; `tests/e2e/fake-backend.js`; `tests/staging/{authz-read,authz-mutation}.js`; `tests/{replica_build, t3b_ao_karna, t3e_installation, t3e_standard_roles, t4a_notiser, t4a_skyddade_falt}.test.js` (se §5.2).
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`):
+- ändrade: `index.html`, `src/services/{AOTimeSyncService,WorkOrderService,TimeService,BillingQueueService,ProfitabilityService}.js`, `src/pages/{WorkOrderDetailPage,TimePage,InvoicesPage,PageShells}.js`; `tests/e2e/fake-backend.js`, `tests/staging/{authz-read,authz-mutation}.js`; detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- nya: `tests/e2e/t4b-regler.js`, `tests/e2e/specs/43_t4b_material_priser.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `bee3288` T4-B server (migration `20261128000011`, EF, rollback, MIGRATIONSORDNING, MIG-1, standardroller)
+- `3bb0874` T4-B tester (`t4b_material_priser`, registret, `t4b-rollback`, paritet, fake-kopia, `t4b-regler`, anpassade T3/T4-A-tester och STAGING-verktyg)
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `953ad19` klient (material radvis, inga belopp för fält, okänt ≠ 0, F13, G12, `?v=`)
+- `5ffc7e6` tester (fake-backend, `t4b-regler`, e2e T4B-01–08, anpassade specar, STAGING-verktyg)
+- e2e-rapport och dokument: se `git log` efter `5ffc7e6`

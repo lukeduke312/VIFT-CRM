@@ -206,18 +206,18 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 
 | # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R13 | Ny materialrad (artikel + mängd, eller fritext + mängd, enhet, dokumentation) | S | S | – | S *(ao_material)* egen tilldelad redigerbar AO | – | Ny radvis RPC (`work_order_material_add`), servern sätter `id`, `addedBy`, `addedAt` och pris från artikel | D-10, D-19 | SÄK-6: hela listan ersätts, priser från klienten |
-| R14 | Ändra och ta bort **egen** materialrad | S | S | – | S egen rad på egen redigerbar AO | – | RPC `work_order_material_update/remove` under lås | D-19 | Hela listan |
-| R15 | Ändra och ta bort **annans** materialrad | S | S *(ao_edit)* | – | – | – | RPC | D-19 | Fält kan |
+| R13 | Ny materialrad (artikel + mängd, eller fritext + mängd, enhet, dokumentation) | S | S | – | S *(ao_material)* egen tilldelad redigerbar AO | – | Ny radvis RPC (`work_order_material_add`), servern sätter `id`, `addedBy`, `addedAt` och pris från artikel | D-10, D-19 | SÄK-6: hela listan ersätts, priser från klienten · **Lokalt verifierad (T4-B, 2026-11-28):** `work_order_material_add` (EF `add_material`) under lås; servern sätter `id`, `addedBy`, `addedAt`, `performedDate` och pris (artikel → ögonblicksbild, fritext → okänt); fältets hela lista nekas (403 `row_path_required`). Ej installerad i STAGING. |
+| R14 | Ändra och ta bort **egen** materialrad | S | S | – | S egen rad på egen redigerbar AO | – | RPC `work_order_material_update/remove` under lås | D-19 | Hela listan · **Lokalt verifierad (T4-B, 2026-11-28):** egna rader på tilldelad AO, annars 403 `not_own_row`; radversion (`stale_write`); källrad i faktura låst (`invoiced_locked`). Ej installerad i STAGING. |
+| R15 | Ändra och ta bort **annans** materialrad | S | S *(ao_edit)* | – | – | – | RPC | D-19 | Fält kan · **Lokalt verifierad (T4-B, 2026-11-28):** bara `ao_edit` (fält 403 `not_own_row`). Ej installerad i STAGING. |
 | R16 | Inköpspris (`articles.buyPrice`, `materials[].buyPrice`): läsa | L | L *(cost_view)* | L | – | – | PROJ (store och `work-orders-list`), EXP | D-01 | Alla läser artiklar. Artikelväljaren visar "Ink:". · **Lokalt verifierad (T4-A, 2026-11-28):** artiklarnas `buyPrice`/`markup` och materialradernas `buyPrice` bara med `cost_view`, även för skrivaren `article_manage`/`ao_edit`; REST-raden för artiklar döljs utan `cost_view`. Artikelväljaren i klienten visar inget inköpspris utan `cost_view`. Ej installerad i STAGING. |
-| R17 | Inköpspris: sätta och komplettera okänt | S | S *(cost_edit)* | S | – | – | RPC (materialrad), `store-key-write` (fältvis för artiklar) | D-01, D-10 | Klienten sätter `\|\| 0` · **Lokalt verifierad (T4-A, 2026-11-28):** (fältdelen) `buyPrice` i artiklar och befintliga materialrader kräver `cost_edit` (403 `field_protected`); saknat värde bevaras vid sparning; inköpspris i en ny materialrad utan `cost_edit` ignoreras (`ignoredFields`). Komplettering av okänt pris och serverpris: T4-B. Ej installerad i STAGING. |
-| R18 | Försäljningspris material: läsa | L | L | L | – (dolt konsekvent överallt) | – | PROJ (`articles.sellPrice`, `materials[].sellPrice`), KLIENT | D-09 | Skickas till fält, artikelväljaren visar |
-| R19 | Försäljningspris material: sätta | S | S | S | – (servern sätter från artikel; fritext = okänt) | – | RPC | D-09, D-10 | Klienten sätter |
-| R20 | Okänt pris → fakturaunderlag | – | Flagga och komplettera | Flagga och komplettera | – | – | RPC `invoice_*` / `_invoice_financial_check` stoppar eller flaggar. TB = ofullständig. | D-10 | Okänt = 0 kr |
-| R21 | Fastpris-AO: material | Ingår i fastpris om inte uttryckligen markerat som tillägg (av `ao_edit`/`invoice_create`) | | | | | RPC (fakturaunderlag) | D-10 | Ej definierat |
-| R22 | Prisgrupp: välja | S | S | S | Namn utan belopp, bara tillåtna grupper | – | EF `ao-time-write` + RPC `time_entry_create` validerar grupp och sätter `hourRate` | D-11 | Fält ser belopp, klienten skickar `hourRate` (F16) |
-| R23 | Timpris (`priceGroups.hourRate`, `timeEntries.hourRate`): läsa | L | L | L | – | – | PROJ (store, `time-entries-list`), KLIENT (stämpla ut, Tid-sidan, AO-detalj) | D-11 | Fält ser |
-| R24 | Historiskt bekräftat pris | Oförändrat vid prisliständring | | | | | RPC (ögonblicksbild i tidpost och materialrad) | D-11 | Ögonblicksbild finns för tidposter |
+| R17 | Inköpspris: sätta och komplettera okänt | S | S *(cost_edit)* | S | – | – | RPC (materialrad), `store-key-write` (fältvis för artiklar) | D-01, D-10 | Klienten sätter `\|\| 0` · **Lokalt verifierad (T4-A, 2026-11-28):** (fältdelen) `buyPrice` i artiklar och befintliga materialrader kräver `cost_edit` (403 `field_protected`); saknat värde bevaras vid sparning; inköpspris i en ny materialrad utan `cost_edit` ignoreras (`ignoredFields`). Komplettering av okänt pris och serverpris: T4-B. Ej installerad i STAGING. · **Lokalt verifierad (T4-B, 2026-11-28):** okänt inköpspris (`buyPriceUnknown`) kompletteras radvis med `cost_view`+`cost_edit`; 0 över okänt från äldre klient ignoreras. Ej installerad i STAGING. |
+| R18 | Försäljningspris material: läsa | L | L | L | – (dolt konsekvent överallt) | – | PROJ (`articles.sellPrice`, `materials[].sellPrice`), KLIENT | D-09 | Skickas till fält, artikelväljaren visar · **Lokalt verifierad (T4-B, 2026-11-28):** försäljningspriset bara med prisläsrätt (`ao_edit`, `ao_view_all`, `invoice_*`, `cost_view`, `article_manage`, `offer_manage`) i alla läs- och skrivsvar och REST; artikelväljaren och materialraderna visar inga belopp för fält. Ej installerad i STAGING. |
+| R19 | Försäljningspris material: sätta | S | S | S | – (servern sätter från artikel; fritext = okänt) | – | RPC | D-09, D-10 | Klienten sätter · **Lokalt verifierad (T4-B, 2026-11-28):** servern sätter (artikel/prisupplösning); fritext pris bara med `invoice_create`/`cost_edit`; annars 403 `field_protected` vid ändring. Ej installerad i STAGING. |
+| R20 | Okänt pris → fakturaunderlag | – | Flagga och komplettera | Flagga och komplettera | – | – | RPC `invoice_*` / `_invoice_financial_check` stoppar eller flaggar. TB = ofullständig. | D-10 | Okänt = 0 kr · **Lokalt verifierad (T4-B, 2026-11-28):** `invoice_append_checked` 409 `price_unknown` (och `price_mismatch`, `source_not_found`, `source_not_billable`); `invoice_set_status` stoppar utskick med okänt pris; kön visar "Pris saknas"; TB ofullständigt. Ej installerad i STAGING. |
+| R21 | Fastpris-AO: material | Ingår i fastpris om inte uttryckligen markerat som tillägg (av `ao_edit`/`invoice_create`) | | | | | RPC (fakturaunderlag) | D-10 | Ej definierat · **Lokalt verifierad (T4-B, 2026-11-28):** material och tid på fastpris-AO → 409 `included_in_fixed_price`; tillägg (`extra`) sätts av `ao_edit`/`invoice_create` och debiteras separat. Ej installerad i STAGING. |
+| R22 | Prisgrupp: välja | S | S | S | Namn utan belopp, bara tillåtna grupper | – | EF `ao-time-write` + RPC `time_entry_create` validerar grupp och sätter `hourRate` | D-11 | Fält ser belopp, klienten skickar `hourRate` (F16) · **Lokalt verifierad (T4-B, 2026-11-28):** fält: bara aktiva grupper, AO:ns grupp när den finns, namn utan belopp; 403 `price_group_not_allowed`; servern sätter `hourRate` (okänt = null). Ej installerad i STAGING. |
+| R23 | Timpris (`priceGroups.hourRate`, `timeEntries.hourRate`): läsa | L | L | L | – | – | PROJ (store, `time-entries-list`), KLIENT (stämpla ut, Tid-sidan, AO-detalj) | D-11 | Fält ser · **Lokalt verifierad (T4-B, 2026-11-28):** `priceGroups.hourRate` och `timeEntries.hourRate` bara med prisläsrätt; klienten visar inga timpriser för fält. Ej installerad i STAGING. |
+| R24 | Historiskt bekräftat pris | Oförändrat vid prisliständring | | | | | RPC (ögonblicksbild i tidpost och materialrad) | D-11 | Ögonblicksbild finns för tidposter · **Lokalt verifierad (T4-B, 2026-11-28):** även materialrader (pris, inköp, moms, priskälla); ändrad artikel/prisgrupp ändrar inga befintliga rader. Ej installerad i STAGING. |
 | R25 | Intern timkostnad `settings.internalHourlyCost` | S | L *(cost_view)* | L | – | – | PROJ | D-01 | `ao_view_all`/`ao_edit`/`offer_manage` får fullt värde · **Lokalt verifierad (T4-A, 2026-11-28):** `internalHourlyCost` bara med `cost_view` (även för `admin_manage`), ändring kräver `cost_edit`; bevaras vid sparning. Ej installerad i STAGING. |
 
 ### 3.3 Tid, fakturering, offerter, kunder (D-07, D-08, D-12, D-13, D-20)
@@ -225,7 +225,7 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
 | R26 | Egen tid och stämpling | S | S | S | S *(ao_time)* bara på tilldelad AO | (separat) | RPC `time_entry_create` + `store_write_stamp_status` under lås kontrollerar tilldelning | AP-B | Ingen AO-kontroll (F16/F23) · **Lokalt verifierad rättning (T3-B, 2026-11-28)**, ej installerad i STAGING |
-| R27 | Andras tid: läsa | L | L *(time_view_all)* | L *(payroll_view)* | – | – | EF `time-entries-list` | D-08 | Bara `payroll_view` |
+| R27 | Andras tid: läsa | L | L *(time_view_all)* | L *(payroll_view)* | – | – | EF `time-entries-list` | D-08 | Bara `payroll_view` · **Lokalt verifierad (T4-B, 2026-11-28):** `time_view_all` ger all personals tid utan löneuppgifter (attest, revisioner); `payroll_view` krävs för lön/attest (K-01). Ej installerad i STAGING. |
 | R28 | Attest | S | – | S *(payroll_manage)* | – | – | EF + RPC `time_entry_set_attested` | D-08 | Som målet |
 | R29 | Löneunderlag och lönexport | L | – | L *(payroll_view)* | – | – | KLIENT + EF (`time-entries-list`) + EXP | D-08 | Som målet |
 | R30 | Fakturaunderlag | S | S *(invoice_*)* | S | – | – | RLS + PROJ (läsning), EF `invoice-write` (`invoice_create`) + RPC | D-07 | Som målet för läsning |
@@ -333,7 +333,14 @@ Ett generiskt fel (500, `write_failed`, nätverksfel, `forbidden` utan `reason` 
 | 403 | `forbidden` / `recipient_not_assigned` | `appendNotification` `ao_assigned`: mottagaren är inte tilldelad AO:n (ingen falsk tilldelningsnotis, AP-D) |
 | 400 | `invalid_entry` | `appendNotification`/`markNotificationsRead`: ogiltig indata (saknat eller för långt `requestId`, text över 500 tecken, fler än 500 id) |
 | 403 | `forbidden` / `export_not_allowed`, `personal_data_not_allowed` | Serverexport (D-18) |
-| 403 | `forbidden` / `price_group_not_allowed` | Prisgrupp som fältet inte får välja (D-11) |
+| 403 | `forbidden` / `price_group_not_allowed` | Prisgrupp som fältet inte får välja (D-11). T4-B: inaktiv grupp, annan än AO:ns grupp (fält), okänd grupp (alla) |
+| 403 | `forbidden` / `row_path_required` | T4-B (D-19): fältets hela materiallista i `patch_ao` — fältet skriver radvis (`add_material`/`update_material`/`remove_material`) |
+| 409 | `invoiced_locked` | T4-B (T3-B beslut 2): materialrad eller tidpost som en icke makulerad faktura (även utkast) gör anspråk på |
+| 409 | `price_unknown` | T4-B (D-10): källrad med okänt pris i nytt underlag, eller utskick av underlag med rad utan à-pris |
+| 409 | `price_mismatch` | T4-B: fakturaradens à-pris ≠ källans serverpris (eller grupperad rad med olika priser) |
+| 409 | `included_in_fixed_price` | T4-B (D-10, R21): material (utan tillägg) eller tid på fastpris-AO som egen fakturarad |
+| 409 | `source_not_billable`, `source_not_found`, `performed_date_required` | T4-B: ej debiterbar källa (t.ex. tid i ej löpande läge), saknad källa/borttagen AO, insats utan utförandedatum (VK-1) |
+| 400 | `invalid_row`, `reason_required` | T4-B: ogiltig materialrad (antal, benämning, enhet, datum); rättning av tid utan orsak (5–500 tecken) |
 
 ---
 
@@ -439,28 +446,28 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-B1-01 | + | FÄ | Materialrad med artikel och mängd på egen AO | E,P,S | L,SG | 200. Servern sätter `sellPrice`/`buyPrice` från artikeln och `addedBy` = FÄ. |
-| SEC-B1-02 | + | FÄ | Fritextrad med benämning, mängd, enhet och dokumentation | E,P | L,SG | 200. `buyPrice=null`, `buyPriceUnknown`, `sellPrice=null`, `sellPriceUnknown`. Aldrig 0. |
-| SEC-B1-03 | − | FÄ | Materialrad med `buyPrice:1`, `sellPrice:1` | E,P | L,SG | 200 `ignoredFields:['buyPrice','sellPrice']`. Lagrat = artikel eller okänt. |
-| SEC-B1-04 | + | FÄ | Ändra och ta bort egen rad | E,P | L,SG | 200 |
-| SEC-B1-05 | − | FÄ | Ändra och ta bort FÄ2:s eller AL:s rad på egen AO | E,P | L,SG | 403 `not_own_row`, AO-KS oförändrad |
-| SEC-B1-06 | − | FÄ | Gammal väg: `patch_ao {materials:[…]}` (hel lista) | E | L,SG | 403 `forbidden` (hel lista nekas för fältet, D-19) |
-| SEC-B1-07 | − | FÄ + AL | Samtidigt: FÄ lägger till, AL tar bort annan rad | P | L | Båda ändringarna finns kvar. Ingen rad försvinner tyst. |
-| SEC-B1-08 | − | FÄ | Rad på fakturerad, arkiverad eller borttagen AO | E,P | L | 409 `ao_locked` |
-| SEC-B1-09 | − | FÄ, BE | `articles[].buyPrice`, `articles[].sellPrice` | R,E,S | L,SG | REST: ingen rad. EF: fälten saknas. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-ART-01/T4-REST-art; K e2e T4A-04).** Försäljningspriset för fält: T4-B. |
-| SEC-B1-10 | − | FÄ | Artikelväljare och materialrad | K | W | Inga belopp (inköp och försäljning) |
+| SEC-B1-01 | + | FÄ | Materialrad med artikel och mängd på egen AO | E,P,S | L,SG | 200. Servern sätter `sellPrice`/`buyPrice` från artikeln och `addedBy` = FÄ. **Lokalt grön (T4-B, `t4b_material_priser` E, P; S paritet B-ADD-art; K e2e T4B-01).** |
+| SEC-B1-02 | + | FÄ | Fritextrad med benämning, mängd, enhet och dokumentation | E,P | L,SG | 200. `buyPrice=null`, `buyPriceUnknown`, `sellPrice=null`, `sellPriceUnknown`. Aldrig 0. **Lokalt grön (T4-B).** |
+| SEC-B1-03 | − | FÄ | Materialrad med `buyPrice:1`, `sellPrice:1` | E,P | L,SG | 200 `ignoredFields:['buyPrice','sellPrice']`. Lagrat = artikel eller okänt. **Lokalt grön (T4-B).** |
+| SEC-B1-04 | + | FÄ | Ändra och ta bort egen rad | E,P | L,SG | 200 **Lokalt grön (T4-B).** |
+| SEC-B1-05 | − | FÄ | Ändra och ta bort FÄ2:s eller AL:s rad på egen AO | E,P | L,SG | 403 `not_own_row`, AO-KS oförändrad **Lokalt grön (T4-B).** |
+| SEC-B1-06 | − | FÄ | Gammal väg: `patch_ao {materials:[…]}` (hel lista) | E | L,SG | 403 `forbidden` (hel lista nekas för fältet, D-19) **Lokalt grön (T4-B): 403 `forbidden`/`row_path_required`.** |
+| SEC-B1-07 | − | FÄ + AL | Samtidigt: FÄ lägger till, AL tar bort annan rad | P | L | Båda ändringarna finns kvar. Ingen rad försvinner tyst. **Lokalt grön (T4-B, ×20).** |
+| SEC-B1-08 | − | FÄ | Rad på fakturerad, arkiverad eller borttagen AO | E,P | L | 409 `ao_locked` **Lokalt grön (T4-B).** |
+| SEC-B1-09 | − | FÄ, BE | `articles[].buyPrice`, `articles[].sellPrice` | R,E,S | L,SG | REST: ingen rad. EF: fälten saknas. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-ART-01/T4-REST-art; K e2e T4A-04).** Försäljningspriset för fält: **lokalt grönt (T4-B, E, R, S B-PG-falt, K T4B-01)**. |
+| SEC-B1-10 | − | FÄ | Artikelväljare och materialrad | K | W | Inga belopp (inköp och försäljning) **Lokalt grön (T4-B, e2e T4B-01).** |
 | SEC-B1-11 | + | AL, EK | `buyPrice`, TB | E | L,SG | Finns **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
 | SEC-B1-12 | − | Egen roll "chef utan `cost_view`" | Samma | E,K,X | L,W | Saknas i alla vägar, även export av `materialRow` **Lokalt grön (T4-A, `t4a_skyddade_falt` E; T3-E-testet SEC-CUST-01 exakt).** Export: T4-F. |
-| SEC-B1-13 | + | EK | Komplettera okänt inköpspris | E,P | L,SG | 200. Flaggan tas bort. Logg. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, för artikeln).** Materialradens okända pris: T4-B. |
+| SEC-B1-13 | + | EK | Komplettera okänt inköpspris | E,P | L,SG | 200. Flaggan tas bort. Logg. **Lokalt grön (T4-A, `t4a_skyddade_falt` E, för artikeln).** Materialradens okända pris: **lokalt grönt (T4-B, E, P; loggas i AO:n)**. |
 | SEC-B1-14 | − | FÄ; egen roll "chef utan `cost_edit`" | Samma | E,P | L | 403 `field_protected` **Lokalt grön (T4-A, `t4a_skyddade_falt` E, artikel och materialrad; SEC-CUST-02).** |
-| SEC-B1-15 | + | EK | Fakturaunderlag med okänt försäljningspris | P | L | Stoppat eller flaggat (`_invoice_financial_check`). Ingen summa 0. |
-| SEC-B1-16 | + | EK | Fastpris-AO med fältmaterial | P | L | Materialet debiteras inte separat om det inte uttryckligen är markerat som tillägg |
+| SEC-B1-15 | + | EK | Fakturaunderlag med okänt försäljningspris | P | L | Stoppat eller flaggat (`_invoice_financial_check`). Ingen summa 0. **Lokalt grön (T4-B): skapande 409 `price_unknown`, utskick 409 `price_unknown`.** |
+| SEC-B1-16 | + | EK | Fastpris-AO med fältmaterial | P | L | Materialet debiteras inte separat om det inte uttryckligen är markerat som tillägg **Lokalt grön (T4-B): 409 `included_in_fixed_price`; tillägg debiteras.** |
 | SEC-B1-17 | − | FÄ | `writeMerge vift_articles` (testartikel) | E | L,SG | 403 `forbidden` **Lokalt grön (T4-A, `t4a_skyddade_falt` E).** |
-| SEC-B2-01 | − | FÄ | `priceGroups[].hourRate`, `timeEntries[].hourRate` | R,E,S | L,SG | Saknas. Gruppnamn finns. |
-| SEC-B2-02 | − | FÄ | Stämpla ut, Tid-sidan, AO-detaljens tidrader | K | W | Inga belopp |
-| SEC-B2-03 | − | FÄ | `create_time` med `hourRate:9999` | E,P | L,SG | 200 `ignoredFields:['hourRate']`. Lagrat = prisgruppens timpris. |
-| SEC-B2-04 | − | FÄ | `create_time` med en prisgrupp som inte är tillåten för fält | E,P | L | 403 `price_group_not_allowed` |
-| SEC-B2-05 | + | ADM | Ändra prisgruppens timpris efter registrerad tid | E | L | Befintliga tidposters `hourRate` oförändrat |
+| SEC-B2-01 | − | FÄ | `priceGroups[].hourRate`, `timeEntries[].hourRate` | R,E,S | L,SG | Saknas. Gruppnamn finns. **Lokalt grön (T4-B).** |
+| SEC-B2-02 | − | FÄ | Stämpla ut, Tid-sidan, AO-detaljens tidrader | K | W | Inga belopp **Lokalt grön (T4-B, e2e T4B-04).** |
+| SEC-B2-03 | − | FÄ | `create_time` med `hourRate:9999` | E,P | L,SG | 200 `ignoredFields:['hourRate']`. Lagrat = prisgruppens timpris. **Lokalt grön (T4-B).** |
+| SEC-B2-04 | − | FÄ | `create_time` med en prisgrupp som inte är tillåten för fält | E,P | L | 403 `price_group_not_allowed` **Lokalt grön (T4-B).** |
+| SEC-B2-05 | + | ADM | Ändra prisgruppens timpris efter registrerad tid | E | L | Befintliga tidposters `hourRate` oförändrat **Lokalt grön (T4-B).** |
 | SEC-B2-06 | − | FÄ, BE, egen roll "chef utan `cost_view`" | `settings.internalHourlyCost` | R,E | L,SG | Saknas **Lokalt grön (T4-A, `t4a_skyddade_falt` E, R; S paritet T4-INST-03).** |
 
 ### 5.5 Tid, fakturering (R26–R32)
@@ -472,10 +479,10 @@ Testdata, alla [E2E-TEST]:
 | SEC-TID-03 | − | FÄ | `setStampStatus {active:true, aoId:<ej tilldelad>}` | E,P | L,SG | 403 `not_assigned`, `stamp_status`-KS oförändrad (F23) |
 | SEC-TID-04 | − | FÄ | `create_time` med `staffId`=FÄ2 | E | L,SG | 403 `forbidden` |
 | SEC-TID-05 | − | FÄ | `patch_time` på FÄ2:s post / egen attesterad post | E,P | L,SG | 403 `forbidden` / 409 `attested_locked` |
-| SEC-TID-06 | + | AL | `time-entries-list` | E | L,SG | Alla tidposter. Utan `hourRate` om `cost_view`/`invoice_*` saknas. |
-| SEC-TID-07 | − | AL | `attest_time` | E | L,SG | 403 `forbidden` |
+| SEC-TID-06 | + | AL | `time-entries-list` | E | L,SG | Alla tidposter. Utan `hourRate` om `cost_view`/`invoice_*` saknas. **Lokalt grön (T4-B): all personals tid utan attest/löneuppgifter.** |
+| SEC-TID-07 | − | AL | `attest_time` | E | L,SG | 403 `forbidden` **Lokalt grön (T4-B).** |
 | SEC-TID-08 | − | AL | Sidan Löneunderlag och lönexport | K,X | W | Ej åtkomlig (`payroll_view` saknas) |
-| SEC-TID-09 | − | FÄ, BE | `time-entries-list` | E,S | L,SG | Bara egna |
+| SEC-TID-09 | − | FÄ, BE | `time-entries-list` | E,S | L,SG | Bara egna **Lokalt grön (T4-B), utan `hourRate`.** |
 | SEC-FAKT-01 | − | FÄ, BE | `invoices` via REST, `readAllWithHashes` | R,E,S | L,SG | REST: tom lista. EF: tom array. |
 | SEC-FAKT-02 | + | AL, EK | Samma | R,E | L,SG | Finns |
 | SEC-FAKT-03 | − | FÄ, egen roll "chef utan `invoice_create`" | `invoice-write` (alla åtgärder) | E | L | 403 `forbidden` |
@@ -660,10 +667,10 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 | D-05 | **Fastställt** · delvis lokalt verifierad (T4-A): skrivare utan `objects_sensitive` får inga portkoder; tilldelningsvägen T4-C | `objects_sensitive` standard för chef, kan tas bort. `objects_access_assigned` för fält, även vid rondering. R48, R49. |
 | D-06 | **Fastställt** · lokalt verifierad (T4-A): AO-ekonomi projiceras bort för fält i `work-orders-list` och skrivsvaren | Ingen AO-ekonomi till fält. Debiteringskategori utan belopp. R12. |
 | D-07 | **Fastställt** | Chef får `invoice_*`. Fakturering bara via `invoice-write`. Faktureringsfält avvisas i `patch_ao` för alla. R10, R30. |
-| D-08 | **Fastställt** (utredning §1.1) | `time_view_all` för chef. `payroll_*` för ekonomi och admin. R27–R29. |
-| D-09 | **Fastställt** | Inga försäljningspriser för fält i någon vy. R18, R19. |
-| D-10 | **Fastställt** | Fritext. Okänt ≠ 0. Faktureringsstopp. Fastpris utan dubbeldebitering. R13, R20, R21. |
-| D-11 | **Fastställt** | Gruppnamn utan belopp. Servern validerar och sätter priset. Historik oförändrad. R22–R24. |
+| D-08 | **Fastställt** (utredning §1.1) · lokalt verifierad (T4-B): `time_view_all` verkställd utan löneuppgifter | `time_view_all` för chef. `payroll_*` för ekonomi och admin. R27–R29. |
+| D-09 | **Fastställt** · lokalt verifierad (T4-B) | Inga försäljningspriser för fält i någon vy. R18, R19. |
+| D-10 | **Fastställt** · lokalt verifierad (T4-B) | Fritext. Okänt ≠ 0. Faktureringsstopp. Fastpris utan dubbeldebitering. R13, R20, R21. |
+| D-11 | **Fastställt** · lokalt verifierad (T4-B) | Gruppnamn utan belopp. Servern validerar och sätter priset. Historik oförändrad. R22–R24. |
 | D-12 | **Fastställt** | Minimal offertreferens för tilldelad AO. R34. |
 | D-13 | **Fastställt** · lokalt verifierad (T3-D + T4-A): `personal_data_view` verkställd; export T4-F | Urval per uppdrag, begränsad poolprojektion, `personal_data_view`. R36, R37, R03. |
 | D-14 | **Fastställt** | Arbetskontakt för interna kollegor. Egen post fullständig. R38–R40. |
@@ -671,7 +678,7 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 | D-16 | **Fastställt** | Tabellen är sanningskälla. Bara förberedelse, ingen migrering. R50. |
 | D-17 | **Fastställt** · lokalt verifierad (T4-A): `bankgiro_edit`, fältvis sammanslagning av inställningar | Läsning för interna roller. Ändring kräver `bankgiro_edit`. Fältvis sammanslagning. R54–R56. |
 | D-18 | **Fastställt** | `export_data`, `export_personal_data`. Serverexport för skyddade fält. R57–R60. |
-| D-19 | **Fastställt** | Radvisa RPC:er. Egna rader. Hela listan nekas för fält. R13–R15. |
+| D-19 | **Fastställt** · lokalt verifierad (T4-B) | Radvisa RPC:er. Egna rader. Hela listan nekas för fält. R13–R15. |
 | D-20 | **Fastställt** | `internalNote`/`customerNote`. Gammalt `note` skrivs inte ut. Ingen dataändring. R31, R32. |
 | D-21 | **Fastställt** | Egen effektiv behörighet. Andras kräver `admin_manage`. R41, R42. |
 | D-22 | **Fastställt** | Typer och referenser per behörighet. Servern sätter identitet och kontrollerar referensen. R45. |
@@ -719,7 +726,7 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | Fynd | SÄK | Allvar | Bekräftelse och kodreferens | Paket (testplanen) |
 |---|---|---|---|---|
 | F1: `ao_complete`-grenen kontrollerar inte tilldelning eller status | SÄK-5 | **P1** | EF `ao-time-write/index.ts:259-265`. `work_order_patch` (`schema/functions.sql`) kontrollerar bara att posten finns, idempotens och `p_expected_updated_at`. Patchen slås ihop med `v_ao \|\| p_patch` utan regelkontroll. | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
-| F2: hel materiallista, priser från klienten, okänt = 0 | SÄK-6 | P1 | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053`, `:2248` | T4-B |
+| F2: hel materiallista, priser från klienten, okänt = 0 | SÄK-6 | P1 | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053`, `:2248` | T4-B · nuläge 2026-11-28: **lokalt verifierad** (T4-B; baslinjen bevisad och vänd i `vift-v2/tests/t4b_material_priser.test.js`), ej installerad i STAGING |
 | F3: ingen tilldelningsväg för åtkomstinformation, dubbel lagring. Skrivare utan `objects_sensitive` får fältet (informationsläckage). | SÄK-7 | **P1** (läckaget), P2 (vägen) | STAGING `get-sensitive-fields` v9 är **nyare** än repot (fail-closed audit, låst supabase-js) och `set-sensitive-fields` v9 använder RPC `sensitive_fields_write`. Repot uppdateras från inventeringen före ändring. Projektionen i `vift_store_full_access` ger skrivare fullt värde. | T4-A, T4-C |
 | F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C · nuläge 2026-11-28: **lokalt verifierad** (T3-C: `vift-v2/tests/t3c_roller.test.js`; baslinjen T3-0 vänd), ej installerad i STAGING |
@@ -730,8 +737,8 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F10: e-post krävs för inloggningen | – | Krav | `AuthService.js:366-372` | T3-D · nuläge 2026-11-28: **uppfyllt lokalt** (T3-C/T3-D: den egna personalposten lämnas oförändrad, med e-post) |
 | F11: `appendActivity` tillåter alla typer och referenser | – | P2 | `activity-log.ts` | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D: `type_not_allowed`/`ref_not_visible` i RPC:n), ej installerad i STAGING |
 | F12: snabbexport utan spärr | (SÄK-1) | P2 | `ImportExportConfigs.js` `showExportMenu` | T4-F |
-| F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B |
-| F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
+| F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B · nuläge 2026-11-28: **lokalt verifierad** (T4-B: inga påhittade standardvärden, TB ofullständigt när värden saknas; e2e T4B-08) |
+| F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`; prisdelen T4-B: tillåten prisgrupp, okänt timpris ≠ 0, `t4b_material_priser`), ej installerad i STAGING |
 | F17: `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload | – | P3 | `schema/functions.sql` | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C · nuläge 2026-11-28: **lokalt verifierad** (T3-C: vitlista i RLS + trigger; `vift_lastChanged` med servervärde, se T3-RESULTAT), ej installerad i STAGING |
 | F19: `rondering-pass-write` kräver `ao_view_all` för allt, ingen kontroll per pass | (Ö3) | P2 | `inventering/.../functions/rondering-pass-write/rondering-pass-write/index.ts:82` | T4-D |
@@ -742,6 +749,8 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3d_informationsatkomst.test.js`), ej installerad i STAGING |
 
 **Nuläge 2026-11-28 (T3-B, lokalt):** F1 (SÄK-5), F4 (SÄK-3/4), F16/F23 (SÄK-11, tilldelningsdelen samt serverpris), F17 (SÄK-12) och F21 (SÄK-15) är rättade i `vift-v2` (migrationerna `20261128000001–03`, ändrade EF) och **lokalt verifierade** (`vift-v2/tests/t3b_ao_karna.test.js`, `t3b_rollback.test.js`, paritet `VIFT-CRM/tests/sim_parity.test.js`). R02–R08, R10 och R26 följer målet lokalt. Övergångsregeln (§4.6 i testplanen) gäller tills T3-E. Inget är installerat i STAGING; kolumnen "Nu (STAGING)" beskriver fortfarande STAGING. Kvar till T4: radvisa materialrader (D-19 fullt), prisgruppsbehörighet (`price_group_not_allowed`), AO-ekonomi i projektionen för fält (R12).
+
+**Nuläge 2026-11-28 (T4-B, lokalt):** F2 (SÄK-6), F13 och prisdelen av F16 (SÄK-11) är åtgärdade och lokalt verifierade (`vift-v2/tests/t4b_material_priser.test.js` 152/0; paritet 233 scenarier, 231 lika, 2 kända; e2e T4B-01–08). R13–R15, R17–R24, R27 följer målet lokalt (D-08–D-11, D-19); `time_view_all` verkställd (K-01). Inget är installerat i STAGING.
 
 **Nuläge 2026-11-28 (T3-D, lokalt):** O2/SÄK-2, F8, F9 och F11 är åtgärdade och lokalt verifierade (`vift-v2/tests/t3d_informationsatkomst.test.js`, `t3d_rollback.test.js`; paritet 141 scenarier, 139 lika, 2 kända utanför T3-D). R34, R36, R38, R40 (skyddade personaluppgifter), R44–R47 följer målet lokalt. Inget är installerat i STAGING.
 
