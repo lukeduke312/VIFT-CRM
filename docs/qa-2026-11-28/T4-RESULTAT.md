@@ -573,7 +573,7 @@ T4-A + B-omgång**.
 
 **VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 729 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 234/0 (233 scenarier, 231 lika, 2 kända: KEY-01, AUTH-02), `rollnamn_guard` 17/0, `staging_tools` 40/0.
 
-**E2E (Playwright mot den simulerade servern):** nya T4B-01–08 (`tests/e2e/specs/43_t4b_material_priser.js`) i riktad körning: 8/8. Hela e2e-sviten: se nästa rad (slutkörning).
+**E2E (Playwright mot den simulerade servern):** nya T4B-01–08 (`tests/e2e/specs/43_t4b_material_priser.js`) i riktad körning: 8/8. **Hela e2e-sviten en gång efter alla ändringar: 274 godkända, 0 fel, 0 blockerade, 0 kända fel av 274 (1 778 s).** Baslinjen efter T4-A var 266 av 266; skillnaden är de åtta nya T4B-01–08. En tidigare upptäcktskörning under arbetet gav 269/5 (MAT-01, PERM-02, AOD-07/08, T3E-01: förväntade, beslutade ändringar, §5.2); de rättades och prövades med `--grep` (6/6) före slutkörningen. Rapporten är committad separat (`tests/e2e/report/`).
 
 Inga negativa tester har försvagats eller tagits bort.
 
@@ -742,4 +742,5 @@ Skyddet ligger på servern; manuell omladdning behövs inte för skyddet, bara f
 **VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
 - `953ad19` klient (material radvis, inga belopp för fält, okänt ≠ 0, F13, G12, `?v=`)
 - `5ffc7e6` tester (fake-backend, `t4b-regler`, e2e T4B-01–08, anpassade specar, STAGING-verktyg)
-- e2e-rapport och dokument: se `git log` efter `5ffc7e6`
+- `687f1b2` dokument
+- e2e-rapport (274/0/0) och dokumenttillägg: se `git log` efter `687f1b2`
