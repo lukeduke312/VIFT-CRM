@@ -9,7 +9,8 @@ Ingenting är installerat eller verifierat i STAGING. LIVE är inte kontaktad. P
 
 - **T4-A** (inkl. tilläggsdel notiser): lokalt klar (vift-v2 `2060b8f`, VIFT-CRM `64a4e2b`); notisbesluten fastställda 2026-11-28 (läsläckan P1).
 - **T4-B**: lokalt klar — se avsnittet "T4-B" nedan (commits och testsiffror där). Installeras i samma serveromgång som T4-A (samlad plan: T4-B §11).
-- **Nästa:** T4-C → T4-D → T4-E → T4-F i oförändrad ordning, därefter samlad regression och T4-leveransen.
+- **T4-C**: lokalt klar — se avsnittet "T4-C" nedan (vift-v2 `3a23521`, VIFT-CRM `a9df331` + dokument). Egen serveromgång efter T4-B (plan: T4-C §11).
+- **Nästa:** T4-D → T4-E → T4-F i oförändrad ordning, därefter samlad regression (hela e2e-sviten en gång efter T4-D enligt beslutet om effektivitet) och T4-leveransen.
 
 ---
 
@@ -744,3 +745,191 @@ Skyddet ligger på servern; manuell omladdning behövs inte för skyddet, bara f
 - `5ffc7e6` tester (fake-backend, `t4b-regler`, e2e T4B-01–08, anpassade specar, STAGING-verktyg)
 - `687f1b2` dokument
 - e2e-rapport (274/0/0) och dokumenttillägg: se `git log` efter `687f1b2`
+
+---
+
+## T4-C – åtkomstinformation till tilldelad personal (SÄK-7 tilldelningsvägen, D-05, D-16 förberedelse, D-23)
+
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den lokala
+STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat eller verifierat i
+STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes. T4-C är en **egen serveromgång efter
+T4-A + T4-B** (eller direkt efter T4-B i samma fönster); §11 nedan kompletterar T4-B §11.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Tilldelningsvägen (SÄK-7 P2, D-05, R49) | `get-sensitive-fields` gör behörighetskontrollen, läsningen och revisionsraden i **en** RPC-transaktion (`sensitive_fields_read`) med `vift_workOrders` och `vift_ronderingspass` låsta (FOR SHARE). `objects_sensitive`/`all`: som förut (alla sex fält). **`objects_access_assigned`**: bara objektet (eller fastighetsnivån) på en **egen tilldelad aktiv AO** — status `nytt`/`planerad`/`pågående`, inte låst (fakturerad, avbruten, arkiverad, borttagen, fakturakopplad), inte pool. Klienten skickar `workOrderId`, och då prövas just den AO:n; utan referens prövas anroparens egna aktiva AO. Fältet får portkod, nyckel, tillträde, larm och kod — inte nyckelkvittensen. Nekat: 403 `forbidden`/`not_assigned` (tilldelning saknas) eller 403 `forbidden` (behörighet saknas). |
+| Ronderingsgrenen (förberedd för T4-D) | Fastighetsnivån för ett **eget tilldelat aktivt ronderingspass** (`staffIds`, `planerat`/`pågående`), aldrig objektnivå via pass. Grenen gäller först när `rondering_utfor` är **verkställd** (`_vift_t4c_rondering_aktiv`: behörigheten finns och står inte i `_vift_ej_verkstallda()`); i T4-C är den avstängd (prövad: 403 `not_assigned`) och prövad i en transaktion som rullas tillbaka med listan utan `rondering_utfor` (eget pass 200, annans pass/objektnivå/utan behörigheten nekas). T4-D aktiverar den genom att verkställa `rondering_utfor` — ingen ändring av RPC:n. |
+| Revision (varje uttag loggat, inga värden) | Exakt en rad i `sensitive_access_audit` per uttag: `allowed` (fältnamn, väg `ao:<id>`/`pass:<id>`/`objects_sensitive`, anroparen) eller `denied` (orsak). Inga värden i någon rad (prövat mot alla testvärden). Ingen revisionsrad → inga värden (500 `audit_unavailable`, fail closed, även om EF:en installeras före databasen). |
+| `objects_access_assigned` verkställd | Borttagen ur `_vift_ej_verkstallda()`, `standardroller.json` (`ejVerkstallda`, version `t4c-2026-11-28`, skripten A–D omgenererade), fake-backendens lista (`t4c-regler.js`) och rolleditorns `_PERM_EJ_VERKSTALLD`. Den ger exakt den beslutade åtkomsten (get-sensitive-fields) och inget annat; extern/intern-indelningen (D-04:s fasta lista) oförändrad. |
+| D-23 (R51) | Triggern `vift_t4c_kanslig_radering` (AFTER UPDATE på `store` för `vift_propertyObjects` och `vift_properties`): när ett element **försvinner ur listan** (permanent radering) tas dess rad i `property_sensitive_access` bort i **samma transaktion**, med en revisionsrad (`write`, `permanent_delete`, fältnamn, aktören) utan värden. Arkivering, inaktivering och mjuk radering (elementet finns kvar) behåller raden; en avvisad eller återrullad skrivning tar inte bort något. Gäller alla skrivvägar (`write`, `writeMerge`, import), oberoende av klientversion. `store_business_key_write`/`_merge_write` sätter aktören (`set_config('vift.aktor', …)`, transaktionslokal) — annars oförändrade. |
+| D-16 (R50, förberedelse) | `supabase/manual/t4c_d16_jamforelse/jamforelse.sql`: **läsande** rapport (READ ONLY-transaktion som rullas tillbaka) med bara antal — objekt och fastigheter per kategori (`lika`, `olika`, `saknas_i_tabell`, `saknas_i_blob`, `tomma`), tabellrader utan post, AO- och återkommande ögonblicksbilder (`accessCode` mot tabellen). Ingen migrering, ingen borttagning, inga värden i utdata. Kan köras läsande i STAGING efter separat GO. |
+| Klient | AO-detaljen (`WorkOrderDetailPage`, `?v=99`): för `objects_access_assigned` utan `objects_sensitive` på egen aktiv AO en knapp **"Visa åtkomstinformation"** i plats-/kontaktkortet (mobil) och Var-kortet (dator); klick hämtar via `get-sensitive-fields` med `workOrderId`, visar värdena escapade på skärmen och sparar dem aldrig i `state` eller `localStorage`. Rolleditorn (`PageShells`, `?v=199`): `objects_access_assigned` inte längre märkt "verkställs i T4-C". Ingen redesign. |
+| Paritet (SÄK-17) | `tests/e2e/t4c-regler.js` (ny, identisk i båda repona) speglar RPC:n och triggern; fake-backenden: `get-sensitive-fields` med tilldelningsgrenen och revisionslogg (`sensitiveAudit`), D-23 i `write`/`writeMerge`. 11 nya scenarier (C-*), alla lika. |
+| Rollback | `supabase/rollback/T4-C/rollback_t4c.sql` (genererad ur kedjan utan T4-C): triggern bort, de tre ersatta funktionerna exakt tillbaka, T4-C:s sex nya funktioner bort. Installera → rollback → installera prövat; T4-C + T4-B + notiser + T4-A + T3-E–T3-B i omvänd ordning = exakt STAGING-facit. Ingen data ändras (revisionsrader och känsliga rader ligger kvar). |
+
+### 1. Inventering före ändringen
+
+- `get-sensitive-fields` (STAGING v9 = repo-källan) krävde `objects_sensitive`/`all`; alla andra fick 403 `Forbidden: objects_sensitive required` och en denied-rad. Ingen väg för fältet trots att standardrollen `personal` har `objects_access_assigned` (verkningslös, T3-E). Läsning och revisionsrad gjordes i två separata anrop (fail closed, men ingen tilldelningskontroll att samordna).
+- `set-sensitive-fields` skriver via `sensitive_fields_write` (I5, atomiskt med revisionsrad); oförändrad i T4-C.
+- Permanent radering av objekt/fastighet (klientens `PropertyObjectService.remove` → `writeMerge`) lämnade raden i `property_sensitive_access` kvar (baslinje).
+- Klienten anropar `get-sensitive-fields` bara med `objects_sensitive` (fastighetskort, objektkort, AO-guiden); fältet hade ingen visning.
+
+### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000012_t4c_atkomstinformation.sql` | **Nya (bara service_role):** `sensitive_fields_read`, `_vift_t4c_ao_aktiv`, `_vift_t4c_pass_aktiv`, `_vift_t4c_pass_tilldelad`, `_vift_t4c_rondering_aktiv`; triggerfunktionen `_vift_t4c_kanslig_radering` (ingen EXECUTE) och triggern `vift_t4c_kanslig_radering`. **Ändrade med samma signatur (3):** `_vift_ej_verkstallda` (utan `objects_access_assigned`), `store_business_key_write`, `store_business_key_merge_write` (bara `set_config('vift.aktor', …)`). **STOP:** T4-B installerad, T4-C inte installerad, md5 för varje ersatt funktion = T4-B-versionen. Rör inga data. |
+| `functions/get-sensitive-fields/index.ts` | `checkViftAuth` (även inaktiverad roll ger inget) + RPC `sensitive_fields_read`; indata `objectId`/`propertyId` + valfria `workOrderId`/`passId`; felkoder 400 `missing_fields`, 403 `forbidden`, 403 `forbidden`/`not_assigned`, 500 `audit_unavailable`. Svarets form oförändrad. |
+| `manual/t4c_d16_jamforelse/jamforelse.sql` | D-16, läsande jämförelse (bara antal). |
+| `rollback/T4-C/rollback_t4c.sql` | Genererad av `tests/local/t4c-rollback.js`. |
+| `manual/t3e_standardroller/standardroller.json` + A–D | Version `t4c-2026-11-28`: `ejVerkstallda` utan `objects_access_assigned`; rollernas behörigheter oförändrade. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | `20261128000012` som klass "ny – ej installerad i STAGING" efter T4-B (MIG-1: installerad 37, ny 12). |
+
+`set-sensitive-fields` är oförändrad (kräver `objects_sensitive`, 403 `Forbidden` + denied-rad).
+**Låsordning:** `vift_workOrders` (FOR SHARE) → `vift_ronderingspass` (FOR SHARE) i `sensitive_fields_read`; D-23-triggern tar en rådgivande transaktionslåsning per mål (samma nyckel som `sensitive_fields_write`). Ingen befintlig väg tar dessa i omvänd ordning (rondering-RPC:erna låser bara `vift_ronderingspass`).
+
+### 3. Klientändringar (VIFT-CRM)
+
+- `WorkOrderDetailPage.js` (`?v=99`): `_atkomstMojlig(ao)` (styr bara knappen; servern avgör) och `visaAtkomst(aoId)`.
+- `PageShells.js` (`?v=199`): `_PERM_EJ_VERKSTALLD` utan `objects_access_assigned`.
+
+### 4. Fake-backend och paritet (SÄK-17)
+
+`tests/e2e/t4c-regler.js` (ny, båda repona); `fake-backend.js` (båda repona, synkade): tilldelningsgrenen, `sensitiveAudit`, D-23. `vift-v2/tests/local/lib/paritet.js`: 11 scenarier C-AO-egen, C-AO-utanref, C-AO-annans, C-AO-klar, C-AO-pool, C-OBJ-annat, C-BE, C-AL, C-FAST, C-PASS, C-INDATA (replik och fake laddar samma känsliga rader); `get-sensitive-fields` ingår i paritetens EF-lista.
+
+### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+#### 5.1 Resultat
+
+**Ny testfil `vift-v2/tests/t4c_atkomstinformation.test.js` (testgruppen `access_info`): 87/0.** Innehåll:
+- BASLINJE mot T4-B (`3bb0874`, `git archive`) på samma data: §6.
+- SEC-B5-06: egen planerad/pågående AO, utan referens, fastighetsnivå, AO utan objekt; exakt en allowed-rad med fältnamn och väg, inga värden; objects_sensitive oförändrad.
+- SEC-B5-07: grenen avstängd före T4-D (403 `not_assigned`); grenen prövad i en återrullad transaktion.
+- SEC-B5-08 (13 fall): annans AO, öppen pool, klar, fakturerad, avbruten, arkiverad, borttagen AO, annat objekt/annan fastighet än AO:ns, okänt AO-id, pass på objektnivå, FÄ2 på FÄ:s AO — 403 `forbidden`/`not_assigned`, KS oförändrad (store, `property_sensitive_access`), **exakt en** denied-rad utan värden; svaret har bara `error`/`reason`.
+- SEC-B5-09: begränsad på egen AO, egen roll "personal utan `objects_access_assigned`", tom lista, arbetsledare utan `objects_sensitive` — 403 `forbidden` + en denied-rad; inaktiv personal 403 `Forbidden` utan rad; indata 400.
+- SEC-B5-10: `set-sensitive-fields` för arbetsledare utan `objects_sensitive`, ekonomi och fält — 403, en denied-rad (write), tabellen orörd.
+- SEC-B5-11: REST-läsning av `property_sensitive_access` 42501 (även objects_sensitive-rollen), ändra/radera/lägga till revisionsrader 42501, egna rader via RLS; `sensitive_fields_read` ej körbar för authenticated; T4-C:s funktioner bara service_role.
+- SEC-B5-12 (D-23): arkivering/inaktivering behåller raden; avvisad (konflikt) och återrullad skrivning tar inte bort; permanent radering av objekt (writeMerge) och via hela värdet (write, v3.4-vägen) tar bort raden med en revisionsrad utan värden; fastighet → fastighetsnivåns rad; objekt utan rad → ingen revisionsrad; **×20** radering samtidigt med läsning.
+- SEC-B5-13 (D-16): rapporten ger antal per kategori, inga värden, ingen ändring; READ ONLY nekar skrivning.
+- **Samtidighet** (egna anslutningar): ×20 parallella uttag → 20 svar och exakt 20 allowed-rader; ×20 nekade → 20 denied-rader; **×20 TOCTOU**: en annan transaktion tar bort tilldelningen och håller låset — uttaget väntar och nekas (aldrig ett uttag på en borttagen tilldelning).
+- Verkställande och speglingar (server = standardroller.json = fake).
+- **Ingen breddning:** profiler (läsningar + 25 skrivande anrop, 988 nycklar/svar) för 13 användare med T4-B-koden och T4-C-koden på samma data; enda skillnaderna är beslutade: (a) personal med `objects_access_assigned` och egen aktiv AO på objektet får 200 (falt, falt2); (b) nekad get-sensitive-fields har felkoden `forbidden` i stället för `Forbidden: objects_sensitive required` (samma status, samma revisionsrad). STAGING:s sju roller: ingen har `objects_access_assigned`, enda skillnaden (b).
+- Gammal klient och installationsfönstret: §12. Rollback och STOP: installera → rollback (T4_LAGE=T4-B, 0 oförklarade, data oförändrade, T4-B:s EF fungerar) → installera → STOP vid andra körning, utan T4-B och vid drift; omvänd ordning hela vägen = STAGING-facit.
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 38/38 testfiler gröna, 1 977 godkända kontroller, 0 fel.** Nya: `t4c_atkomstinformation` 87/0. Ändrade och gröna: `t3e_standard_roles` 93/0, `t3e_installation` 59/0, `t4a_skyddade_falt` 138/0, `t4a_notiser` 93/0, `t4b_material_priser` (pinnad till T4-B), `replica_build` 42/0, `paritet_fake_kopia` 245/0 (244 scenarier, 242 lika, 2 kända), `migrationskedja` (108 identiska, 124 förklarade, 0 oförklarade), `migrationsmappning` 18/0; registret `t4-andringar.js` PASS (73 objekt), `t4c-rollback.js` och `t4b-rollback.js` PASS. Körningen avbröts av verktygets tidsgräns efter 35 filer (två fel i `t3e_*`: förväntade, beslutade ändringar enligt §5.2, rättade); de rättade och de tre återstående filerna kördes sedan var för sig (gröna). En körning av `t4c_atkomstinformation` samtidigt med VIFT-CRM:s run-all gav ett fel i rollbacksektionens schemajämförelse (avbruten `jamfor-schema`-process under last); omkörd ensam: 87/0. Webbläsartesterna i `browser/` hoppades över (SKIP_BROWSER=1) och räknas inte som godkända.
+
+**VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 740 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 245/0, `rollnamn_guard` 17/0.
+
+**E2E (Playwright mot den simulerade servern), riktad körning `--grep` för berörda specar: 47/0/0** (nya T4C-01–03; PERM-01/02, REG-*, PROP-*, T3E-01/02/03/06, T4A-01/06, T3D-03 m.fl. som rör `get-sensitive-fields` eller ej verkställda behörigheter). Hela e2e-sviten körs en gång efter T4-D (beslut: effektivitet).
+
+Inga negativa tester har försvagats eller tagits bort.
+
+#### 5.2 Ändrade äldre tester (varje ändring förklarad; inget negativt fall borttaget)
+
+| Test | Ändring | Skäl |
+|---|---|---|
+| `t4b_material_priser` | Prövar T4-B-paketet **så som det levererades**: kedjan utan T4-C och senare (`T4_LAGE=T4-B`) och EF ur `3bb0874`; ominstallationens OBS-rad får bara nämna senare pakets objekt | T4-C ändrar `get-sensitive-fields` och `_vift_ej_verkstallda`; samspelet prövas i `t4c_atkomstinformation` |
+| `t4a_skyddade_falt`, `t4a_notiser` | Kedjan "utan T4-B" utesluter även senare T4-paket (`franOchMed`); ej-verkställd-listan jämförs med standardroller.json plus de behörigheter senare paket verkställt | T4-C:s STOP kräver T4-B; standardroller.json speglar det senaste paketet |
+| `t3e_standard_roles` | SEC-CUST-14/17 prövar nu den beslutade åtkomsten exakt (`anrop:portkod_objekt`); personal får sin AO:s åtkomstinformation (200 + allowed-rad); SEC-CUST-03/SEC-B5-09 väntar felkoden `forbidden` (reason saknas) | `objects_access_assigned` verkställd; felkoden enligt katalogen §4 |
+| `replica_build` | 12 nya migrationer; T4-B 33 objekt (`_vift_ej_verkstallda` ändras igen av T4-C), T4-C 10 objekt; grants även för T4-C | Ny migration |
+| `tests/local/t4-andringar.js`, `jamfor-schema.js`, `lib/replik.js` (`franOchMed`), `t4b-rollback.js`, `t4a-notiser-rollback.js` | Registret byggs lager för lager (T4-C → T4-B → notiser → T4-A), `md5_t4b` och `T4_LAGE=T4-B`; generatorerna utesluter senare paket | Samma mönster som T4-B |
+| VIFT-CRM e2e PERM-01 | Fältet får portkoden för egen aktiv AO:s fastighet (200); fastighet utan egen aktiv AO nekas (403) | D-05 (tidigare nekades all åtkomst — exakt SÄK-7:s saknade väg) |
+| VIFT-CRM e2e T3E-01, T3E-06 | Fyra ej verkställda behörigheter (tidigare fem) | `objects_access_assigned` verkställd |
+
+### 6. Baslinjefynd, vända
+
+Bevisade i oförändrad kod (T4-B, `3bb0874`) på samma data i `t4c_atkomstinformation.test.js` och vända i samma test:
+
+| Baslinje (T4-B-koden) | Godkänt säkerhetstest (T4-C) |
+|---|---|
+| **SÄK-7 (P2, vägen) / D-05:** fältet (personal med `objects_access_assigned`) får inte åtkomstinformationen för sin egen tilldelade aktiva AO — vägen saknas; behörigheten står i `_vift_ej_verkstallda()` | SEC-B5-06 (E, P ×20, S, K); SEC-B5-08/09 nekar allt annat |
+| **D-23:** permanent radering av ett objekt lämnar portkod och nyckelinformation kvar i `property_sensitive_access` | SEC-B5-12 (E, P, S, K) |
+
+`baslinje_sakerhet` (historisk källa fb71f26) oförändrad.
+
+### 7. SÄK och D efter T4-C
+
+- **Lokalt åtgärdade:** SÄK-7 (läckaget T4-A, **tilldelningsvägen T4-C** — SÄK-7 därmed lokalt åtgärdad i sin helhet; ronderingsdelen aktiveras i T4-D); D-05 (lokalt verifierad: objects_sensitive som standard för arbetsledare, tilldelningsvägen för fältet, rondering förberedd); D-23; D-16 (förberedelsen: läsande rapport; själva migreringen är ett senare separat beslut); R49, R50, R51; SÄK-17 för T4-C:s vägar.
+- **Öppna:** SÄK-14 (T4-D); ronderingsgrenen (aktiveras och prövas i T4-D); SÄK-1 (T4-F); D-16:s migrering (ej beslutad).
+
+### 8. Gammal klient (v3.4, T3, T4-A/B i Service Worker-cache) mot ny server (§12 i testet)
+
+| Åtgärd | Gammal klient | Följd |
+|---|---|---|
+| Fastighets-/objektkort och AO-guiden med `objects_sensitive` | Samma svar (fält och värden, prövat byte för byte mot T4-B-EF:en) | Oförändrat |
+| Fältets AO-detalj | Ingen knapp (gamla klienter anropar bara med `objects_sensitive`) | Fältet ser ingen portkod förrän omladdning — inget läckage, bara utebliven funktion |
+| Permanent radering av objekt/fastighet (`write`/`writeMerge`) | D-23 i servern (triggern) | Känsliga raden tas bort oberoende av klientversion |
+| Nekad `get-sensitive-fields` | `forbidden` i stället för `Forbidden: objects_sensitive required` | Klienterna läser bara `res.ok` — ingen skillnad |
+
+### 9. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | `access_info` 87/0, `sim_parity`, run-all i båda repona, riktad e2e |
+| Negativa tester: rätt felkod och ingen mutation | Ja | `expectReject` + exakt en denied-rad i varje fall |
+| Atomiska samtidighetskontroller | Ja | Kontroll + revisionsrad i en RPC under delade lås; ×20 parallellt, ×20 TOCTOU, ×20 radering/läsning |
+| Ingen oavsiktligt utökad informationsåtkomst | Ja | 13 användare + 7 STAGING-roller: bara de beslutade skillnaderna |
+| Verksamhetskritiska flöden | Ja | objects_sensitive-flödena oförändrade; arkivering behåller; run-all och e2e |
+| Avgränsade commits | Ja | Server, tester, klient, dokument |
+| Prövad rollback | Ja | Installera → rollback → installera, STOP, omvänd ordning = STAGING-facit |
+| Faktisk verifieringsnivå i masterplanen | Ja | SÄK-7, D-05, D-16, D-23, T4-C-raden, V7 |
+| PG17 och Deno | Nej (miljön) | Releasevillkor |
+
+**GO-kriterier T4-C (testplanen §6):** ingen åtkomst till andras eller inaktiva uppdrags uppgifter — **ja** (SEC-B5-08, 13 fall + TOCTOU); varje uttag loggas — **ja** (exakt en rad per uttag, även ×20 parallellt); inga värden i loggen — **ja**.
+
+### 10. Införandeplan per STAGING-roll (läsande analys)
+
+Ingen av STAGING:s sju roller har `objects_access_assigned`; ingen roll får ny åtkomst vid installationen (enda skillnaden: felkodens form vid nekad get-sensitive-fields). Fältets väg börjar gälla först när ett konto får behörigheten — standardrollen `personal` (D-26, steg 4) eller ett uttryckligt tillägg efter separat GO.
+
+### 11. Installationsplan och rollback (komplement till T4-B §11; beskrivs, körs inte)
+
+**Förutsättningar:** separat GO; T4-A + notisdelen + T4-B installerade (T4-B §11). Kan installeras i samma fönster direkt efter T4-B eller i en egen omgång.
+**Backup (tillägg):** EF-backup av `get-sensitive-fields` och `set-sensitive-fields`; definitionerna av `_vift_ej_verkstallda`, `store_business_key_write`, `store_business_key_merge_write` (md5 = STOP-värdena); backupschema med `property_sensitive_access` och `sensitive_access_audit` (struktur och antal i rapporten, värden bara i det skyddade backupschemat).
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | md5 av de tre ersatta funktionerna = STOP-värdena; antal rader i `property_sensitive_access` och `sensitive_access_audit`; D-16-rapporten (`jamforelse.sql`, bara antal) |
+| 2. Databas | `20261128000012` i egen transaktion. Ingen `db push`, ingen `migration repair` |
+| 3. Edge Functions, direkt efter steg 2 | `get-sensitive-fields` (med `_shared/vift-auth.ts`, samma version som T4-B-bunten) |
+| 4. Klient | Klientpaket med `WorkOrderDetailPage` `?v=99` och `PageShells` `?v=199` (kan följa med T4-D:s paket) |
+| 5. Storage | Ingen ändring |
+| 6. Efterkontroll (V7) | md5 av nya/ändrade objekt = `tests/local/t4-andringar.json`; märkt testobjekt med testportkod och märkt test-AO för ett testkonto med `objects_access_assigned`: SEC-B5-06 (allowed-rad), SEC-B5-08 (denied-rad), SEC-B5-09 (begränsat konto) — högst ett fåtal revisionsrader, redovisade; D-23 prövas bara lokalt (ingen radering i STAGING utan separat GO) |
+
+**Fönstret mellan steg 2 och 3** (T4-B-EF mot T4-C-databasen, prövat): som före — objects_sensitive fungerar, fältet nekas. **Fel ordning** (ny EF före databasen): 500 `audit_unavailable` utan värden (fail closed). **D-23 gäller från steg 2** för alla skrivvägar.
+
+**Rollback (ingen data skrivs över):** 1) föregående `get-sensitive-fields` och föregående klientpaket; 2) (om T4-D installerad) T4-D:s rollback först; 3) `supabase/rollback/T4-C/rollback_t4c.sql` (trigger bort, tre funktioner exakt tillbaka, sex nya bort; rör ingen tabell och ingen rad — revisionsrader och känsliga rader ligger kvar); 4) T4-B:s rollback osv. (T4-B §11). Rader som D-23 tagit bort återskapas inte av rollbacken (de hörde till permanent raderade poster); vid ett separat beslut om datafel finns de i backupschemat.
+
+### 12. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- D-23 gäller bara `vift_propertyObjects`/`vift_properties` (de poster som har rader i tabellen); AO:ns och återkommande ärendens `accessCode` i bloben ligger kvar enligt D-16 (ingen migrering).
+- Aktörens identitet i D-23:s revisionsrad sätts av `store_business_key_*`; en annan framtida skrivväg utan `vift.aktor` ger en rad utan användare (raderingen sker ändå).
+- `set-sensitive-fields` returnerar fortfarande `Forbidden` (versal) vid nekad skrivning (oförändrad EF).
+- Ronderingsgrenen ger bara fastighetsnivån (pass har inget objekt).
+
+**Beslut som behövs (förslag i parentes; det restriktiva valet är genomfört):**
+1. "Aktiv AO" = `nytt`, `planerad`, `pågående` och inte låst; klar AO ger inget. (Godta.)
+2. Utan `workOrderId` prövas fältets alla egna aktiva AO på objektet/fastigheten. (Godta; klienten skickar alltid referensen.)
+3. Fältet får inte nyckelkvittensen (`keyReceipt`). (Godta.)
+4. Fastighetsnivån (entrékod) lämnas ut för fastigheten på egen aktiv AO även när AO:n gäller ett objekt. (Godta — behövs för att nå objektet.)
+5. Nekad get-sensitive-fields har felkoden `forbidden` enligt katalogen (tidigare fritext). (Godta.)
+
+### Ändrade filer
+
+**vift-v2:** nya `supabase/migrations/20261128000012_t4c_atkomstinformation.sql`, `supabase/rollback/T4-C/rollback_t4c.sql`, `supabase/manual/t4c_d16_jamforelse/jamforelse.sql`, `tests/t4c_atkomstinformation.test.js`, `tests/local/t4c-rollback.js`, `tests/e2e/t4c-regler.js`; ändrade `supabase/functions/get-sensitive-fields/index.ts`, `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`, `supabase/manual/t3e_standardroller/{standardroller.json, A–D}`, `tests/local/{t4-andringar.js, t4-andringar.json, jamfor-schema.js, lib/replik.js, lib/paritet.js, t4b-rollback.js, t4a-notiser-rollback.js}`, `tests/e2e/fake-backend.js`, `tests/{replica_build, t3e_standard_roles, t4a_notiser, t4a_skyddade_falt, t4b_material_priser}.test.js`.
+
+**VIFT-CRM:** ändrade `index.html`, `src/pages/{WorkOrderDetailPage,PageShells}.js`, `tests/e2e/fake-backend.js`, `tests/e2e/specs/{14_permissions,40_t3e_standardroller}.js`, detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`; nya `tests/e2e/t4c-regler.js`, `tests/e2e/specs/44_t4c_atkomstinformation.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `3c0ac1f` T4-C server (migration `20261128000012`, `get-sensitive-fields`, rollback, D-16-skriptet, MIGRATIONSORDNING, MIG-1, standardroller)
+- `3a23521` T4-C tester (`t4c_atkomstinformation`, registret, `t4c-rollback`, paritet, fake-kopia, `t4c-regler`, anpassade tester)
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `93a22d4` klient (åtkomstknappen i AO-detaljen, rolleditorn, `?v=`)
+- `a9df331` tester (fake-backend, `t4c-regler`, e2e T4C-01–03, anpassade specar)
+- dokument: se `git log` efter `a9df331`
