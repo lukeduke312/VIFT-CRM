@@ -11750,10 +11750,10 @@ const AdminPage = {
      tests/rollnamn_guard.test.js jämför dem. De visas i rolleditorn märkta med paketet och
      ger ingen åtkomst — ingen vy eller knapp i klienten använder dem. */
   /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda
-     (vift-v2 20261128000009); cost_edit:s materialradsdel och prisflödet är T4-B. */
+     (vift-v2 20261128000009); cost_edit:s materialradsdel och prisflödet är T4-B.
+     T4-C (2026-11-28): objects_access_assigned verkställd (vift-v2 20261128000012). */
   _PERM_EJ_VERKSTALLD: {
     'ao_plan_own':             'AO-etappen',
-    'objects_access_assigned': 'T4-C',
     'rondering_utfor':         'T4-D',
     'export_data':             'T4-F',
     'export_personal_data':    'T4-F',

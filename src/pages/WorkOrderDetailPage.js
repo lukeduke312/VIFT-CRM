@@ -84,6 +84,46 @@ const WorkOrderDetailPage = {
     return String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9_.:\-]/g, '');
   },
 
+  /* T4-C (D-05, SÄK-7 tilldelningsvägen): fältpersonal med objects_access_assigned (utan
+     objects_sensitive) hämtar åtkomstinformationen för EGEN tilldelad AKTIV AO via den smala,
+     loggade servervägen (get-sensitive-fields med workOrderId). Servern avgör; klientens villkor
+     styr bara om knappen visas. Värdena visas på begäran, sparas aldrig i state eller cache, och
+     varje hämtning ger en revisionsrad hos servern (utan värden). */
+  _atkomstMojlig(ao) {
+    if (!ao || typeof Auth === 'undefined' || !Auth.can('objects_access_assigned') || Auth.can('objects_sensitive')) return false;
+    const me = state.currentUser && state.currentUser.id;
+    const mine = !!me && Array.isArray(ao.staff) && ao.staff.map(String).includes(String(me));
+    const aktiv = ['nytt', 'planerad', 'pågående'].includes(ao.status) && !ao.archived && !ao.deleted && !ao.invoiceId;
+    return mine && aktiv && !!(ao.objectId || ao.propertyId);
+  },
+
+  async visaAtkomst(aoId) {
+    const ao = (state.workOrders || []).find((x) => x && x.id === aoId);
+    const els = Array.from(document.querySelectorAll('.aod-atkomst'));
+    const visa = (html) => els.forEach((el) => { el.innerHTML = html; });
+    if (!ao || !this._atkomstMojlig(ao)) { visa('<span class="aod-muted">Åtkomstinformation visas bara för egna aktiva uppdrag.</span>'); return; }
+    visa('<span class="aod-muted">Hämtar …</span>');
+    try {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/get-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + (Auth.getAccessToken() || ''), 'Content-Type': 'application/json' },
+        body: JSON.stringify(ao.objectId ? { objectId: ao.objectId, workOrderId: ao.id } : { propertyId: ao.propertyId, workOrderId: ao.id })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        visa('<span class="aod-muted">' + (d && d.reason === 'not_assigned'
+          ? 'Åtkomstinformation visas bara för egna aktiva uppdrag.' : 'Åtkomstinformationen kunde inte hämtas.') + '</span>');
+        return;
+      }
+      const rader = [['Portkod', d.doorCode || d.accessCode], ['Kod', d.doorCode && d.accessCode && d.accessCode !== d.doorCode ? d.accessCode : ''],
+        ['Nyckel', d.keyInformation], ['Tillträde', d.accessInformation], ['Larm', d.alarmInformation]].filter((r) => r[1]);
+      visa(rader.length ? rader.map((r) => `<span>${esc(r[0])} <b class="aod-code">${esc(r[1])}</b></span>`).join(' · ')
+        : '<span class="aod-muted">Ingen åtkomstinformation registrerad.</span>');
+    } catch (e) {
+      visa('<span class="aod-muted">Åtkomstinformationen kunde inte hämtas.</span>');
+    }
+  },
+
   /* Tomläge enligt V3-komponentstandarden (§6): .empty med ikon, h3, en
      mening och en åtgärd om sådan finns — här kompakt inne i kortet. Kortets
      egen rubrikknapp döljs medan tomläget visas (en åtgärd, inte två). */
@@ -160,7 +200,9 @@ const WorkOrderDetailPage = {
     const showDetailsOpen = typeof window !== 'undefined' && window.innerWidth >= 1200;
     /* Mobilens plats-/kontaktkort ritas bara när det finns något att visa
        (en order utan adress och kontakt gav annars ett tomt kort). */
-    const hasField = !!(mapsUrl || ao.phone || fullAddr || (ao.accessCode && Auth.can('objects_sensitive')) || ao.objectId || ao.contactPerson);
+    const atkomst = this._atkomstMojlig(ao);
+    const atkomstKnapp = atkomst ? `<span class="aod-atkomst"><button class="btn bs bsm" onclick="WorkOrderDetailPage.visaAtkomst('${this._id(ao.id)}')">${ic('key',13)} Visa åtkomstinformation</button></span>` : '';
+    const hasField = !!(mapsUrl || ao.phone || fullAddr || (ao.accessCode && Auth.can('objects_sensitive')) || atkomst || ao.objectId || ao.contactPerson);
 
     el.innerHTML = `
       ${ao.deleted ? `<div class="nbox aod-banner is-danger">${ic('trash',14)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?esc(fmtDate(ao.deleteAfter)):'om 14 dagar'}.</div>` : ''}
@@ -235,6 +277,7 @@ const WorkOrderDetailPage = {
               <div class="aod-field-rows">
                 ${fullAddr ? `<div class="aod-fr">${ic('map-pin',14)}<span>${esc(fullAddr)}${placeBits.length ? ` <em>· ${placeBits.join(' · ')}</em>` : ''}</span></div>` : ''}
                 ${ao.accessCode && Auth.can('objects_sensitive') ? `<div class="aod-fr">${ic('key',14)}<span>Portkod <b class="aod-code">${esc(ao.accessCode)}</b></span></div>` : ''}
+                ${atkomst ? `<div class="aod-fr">${ic('key',14)}${atkomstKnapp}</div>` : ''}
                 ${ao.objectId ? `<div class="aod-fr">${ic('dashboard',14)}${objLink}</div>` : ''}
                 ${ao.contactPerson || ao.phone ? `<div class="aod-fr">${ic('user',14)}<span>${ao.contactPerson ? esc(ao.contactPerson) : ''}${ao.phone ? ` <span class="aod-muted">${esc(ao.phone)}</span>` : ''}</span></div>` : ''}
               </div>
@@ -308,6 +351,7 @@ const WorkOrderDetailPage = {
                 ${placeBits.length ? fact('Plats', placeBits.join(' · '), 'map-pin') : ''}
                 ${ao.objectId ? fact('Objekt', objLink, 'dashboard') : ''}
                 ${ao.accessCode && Auth.can('objects_sensitive') ? fact('Portkod', `<span class="aod-code">${esc(ao.accessCode)}</span>`, 'key') : ''}
+                ${atkomst ? fact('Åtkomst', atkomstKnapp, 'key') : ''}
               </div>
             </section>
 
