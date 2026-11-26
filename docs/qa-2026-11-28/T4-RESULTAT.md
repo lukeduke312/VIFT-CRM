@@ -10,7 +10,8 @@ Ingenting är installerat eller verifierat i STAGING. LIVE är inte kontaktad. P
 - **T4-A** (inkl. tilläggsdel notiser): lokalt klar (vift-v2 `2060b8f`, VIFT-CRM `64a4e2b`); notisbesluten fastställda 2026-11-28 (läsläckan P1).
 - **T4-B**: lokalt klar — se avsnittet "T4-B" nedan (commits och testsiffror där). Installeras i samma serveromgång som T4-A (samlad plan: T4-B §11).
 - **T4-C**: lokalt klar — se avsnittet "T4-C" nedan (vift-v2 `3a23521`, VIFT-CRM `a9df331` + dokument). Egen serveromgång efter T4-B (plan: T4-C §11).
-- **Nästa:** T4-D → T4-E → T4-F i oförändrad ordning, därefter samlad regression (hela e2e-sviten en gång efter T4-D enligt beslutet om effektivitet) och T4-leveransen.
+- **T4-D**: lokalt klar — se avsnittet "T4-D" nedan (vift-v2 `6aac190`, VIFT-CRM `485ce2d` + dokument). Installeras efter T4-C (plan: T4-D §11). Hela e2e-sviten efter T4-C + T4-D: 281/0/0.
+- **Nästa:** T4-E → T4-F i oförändrad ordning, därefter samlad regression och T4-leveransen (9 punkter).
 
 ---
 
@@ -822,7 +823,7 @@ T4-A + T4-B** (eller direkt efter T4-B i samma fönster); §11 nedan komplettera
 
 **VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 740 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 245/0, `rollnamn_guard` 17/0.
 
-**E2E (Playwright mot den simulerade servern), riktad körning `--grep` för berörda specar: 47/0/0** (nya T4C-01–03; PERM-01/02, REG-*, PROP-*, T3E-01/02/03/06, T4A-01/06, T3D-03 m.fl. som rör `get-sensitive-fields` eller ej verkställda behörigheter). Hela e2e-sviten körs en gång efter T4-D (beslut: effektivitet).
+**E2E (Playwright mot den simulerade servern), riktad körning `--grep` för berörda specar: 47/0/0** (nya T4C-01–03; PERM-01/02, REG-*, PROP-*, T3E-01/02/03/06, T4A-01/06, T3D-03 m.fl. som rör `get-sensitive-fields` eller ej verkställda behörigheter). Hela e2e-sviten kördes en gång efter T4-D (beslut: effektivitet): 281/0/0, se T4-D §5.1.
 
 Inga negativa tester har försvagats eller tagits bort.
 
@@ -933,3 +934,184 @@ Ingen av STAGING:s sju roller har `objects_access_assigned`; ingen roll får ny 
 - `93a22d4` klient (åtkomstknappen i AO-detaljen, rolleditorn, `?v=`)
 - `a9df331` tester (fake-backend, `t4c-regler`, e2e T4C-01–03, anpassade specar)
 - dokument: se `git log` efter `a9df331`
+
+---
+
+## T4-D – rondering per pass (`rondering_utfor`, SÄK-14/F19, Ö3, R52/R53)
+
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den lokala
+STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat eller verifierat i
+STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes. T4-D installeras efter T4-C (samma
+omgång eller egen); §11 kompletterar T4-C §11. **Ingen ombyggnad eller redesign av ronderingens UI.**
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Passåtgärderna (SÄK-14, R52) | `rondering_point_patch`, `rondering_pass_save_note`, `rondering_pass_auto_start`, `rondering_pass_complete` får anroparens behörigheter och personal-id från EF:en (ur JWT:n) och prövar passregeln **under radlåset** på `vift_ronderingspass` i samma transaktion som skrivningen (`_vift_t4d_las_pass` → `_vift_t4d_pass_regel`): `ao_view_all`/`all` — alla pass, som förut; `rondering_utfor` — bara **egna** tilldelade pass (`staffIds`), och ett avslutat pass (`slutfört`/`har_avvikelser`) ändras inte (409 `pass_completed`; `autoStart` är en no-op); annars 403 `forbidden`. Fältets avvikelse-/AO-referens ignoreras och redovisas (`ignoredFields`). Okänt pass-id ger fältet 403 `not_assigned` (inget orakel), arbetsledaren 404 som förut. De gamla signaturerna är borttagna — en äldre EF kan inte kringgå kontrollen. |
+| Skapa och mallar (R53) | `create`, `bulkCreate`, `migrateLegacy` och mallar/ronderingar via `store-key-write` kräver fortsatt `ao_view_all` (403 `forbidden`). |
+| Projektion per pass (R52/R53) | `vift_ronderingspass`, `vift_ronderingar`, `vift_ronderingsmallar` i sin helhet (även REST) bara för `ao_view_all`. Fältet med `rondering_utfor`: sina **egna** pass och ronderingen de hör till — utan pris (`hourRate`, `fixedPrice`, prisgrupp, `debiterbar`), intern anteckning, bilder och schemats personal; inga mallar. Andra roller utan `ao_view_all`: inget (tidigare: allt, "else true"). |
+| Ronderingshändelser (T3-D beslut 5) | `rondering_started`/`_completed`, `point_ok`, `point_ej_aktuell` får rapporteras och läsas med `rondering_utfor` för ronderingar där anroparen har ett eget pass (`_vift_post_refs` → `ronderingar`, `_vift_ref_visible`, `_vift_activity_type_perms` = TS `TYPE_PERMS`); avvikelsehändelser och "skapa rondering" kräver fortsatt `ao_view_all`. Det tillfälliga kravet `ao_view_all` är därmed ersatt av passbaserad behörighet. |
+| T4-C:s ronderingsgren aktiverad (SEC-B5-07) | När `rondering_utfor` verkställs gäller T4-C:s gren i `sensitive_fields_read` utan ändring: fältet får fastighetsnivåns åtkomstinformation för sitt eget **aktiva** pass (loggat); annans pass, avslutat pass, objektnivå via pass och roll utan `rondering_utfor` nekas (403 `not_assigned`). |
+| `rondering_utfor` verkställd | Borttagen ur `_vift_ej_verkstallda()`, `standardroller.json` (version `t4d-2026-11-28`, skripten omgenererade), fake-backendens lista (`t4d-regler.js`) och rolleditorns `_PERM_EJ_VERKSTALLD`. Extern/intern-indelningen oförändrad. |
+| Klient | `AuthService` (`?v=27`): `PAGE_PERMISSIONS` för `pg-rondering-utfor` och `pg-rondering-rapport` = `ao_view_all` **eller** `rondering_utfor` (listan och guiden kräver fortfarande `ao_view_all`). `RonderingUtforandePage` (`?v=15`): för fältet sparas en anmärkning på punkten (status + rubrik/kommentar) utan avvikelse eller AO och dialogen visar ingen "Skapa AO". `state.js` (`?v=84`): `LiveSync` läser fältets pass via `readAllWithHashes` (REST-raden är dold). `PageShells` (`?v=200`): rolleditorn utan `rondering_utfor` som ej verkställd. Ingen redesign. |
+| Paritet (SÄK-17) | `tests/e2e/t4d-regler.js` (ny, båda repona); fake-backenden följer passregeln (även att arbetsledaren får ändra avslutade pass, som servern — tidigare avvek fake med `pass_completed` för alla), projektionen, REST-döljningen och ronderingshändelserna. 24 nya scenarier (R-*, C-PASS-D/klar), alla lika. |
+| Rollback | `supabase/rollback/T4-D/rollback_t4d.sql` (genererad): T4-D-signaturerna bort, de fyra föregående passåtgärderna och de sex ersatta funktionerna exakt tillbaka, hjälpfunktionerna bort. Installera → rollback → installera prövat; T4-D + T4-C + … + T3-B i omvänd ordning = STAGING-facit. Ingen data ändras. |
+
+### 1. Inventering före ändringen
+
+- `rondering-pass-write` (återställd källa, STAGING v3) krävde `ao_view_all` för **allt** och kontrollerade inget per pass (F19); RPC:erna tog varken behörigheter eller (för anteckning/start) anroparen.
+- `vift_ronderingspass`, `vift_ronderingar` och `vift_ronderingsmallar` var "else true" i `vift_store_full_access`: varje roll med giltig behörighet läste alla pass, ronderingar med pris och intern anteckning, och mallar — även direkt via REST (baslinje).
+- Klienten: ronderingssidorna kräver `ao_view_all`; `LiveSync` läser passen via REST; anmärkning skapar en avvikelse (`store-key-write`, `ao_view_all`) och valfritt en AO.
+
+### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000013_t4d_rondering.sql` | **Nya:** `_vift_t4d_egna_ronderingar`, `_vift_t4d_pass_regel`, `_vift_t4d_las_pass`; passåtgärderna med ny signatur (`p_caller_perms`, anroparen). **Borttagna:** de fyra föregående signaturerna. **Ändrade med samma signatur (6):** `_vift_ej_verkstallda`, `vift_store_full_access`, `vift_store_project`, `_vift_post_refs`, `_vift_ref_visible`, `_vift_activity_type_perms`. **STOP:** T4-C installerad, T4-D inte installerad, md5 för varje ersatt/borttagen funktion = T4-C-versionen. Rör inga data. |
+| `functions/rondering-pass-write/index.ts` | Första lager `ao_view_all` eller `rondering_utfor`; skapa/massskapa/migrera kräver `ao_view_all`; behörigheter och anroparen till RPC:n; felkoder 403 `forbidden`, 403 `forbidden`/`not_assigned`, 409 `pass_completed`; `ignoredFields`. |
+| `functions/store-key-write/activity-log.ts` | `TYPE_PERMS`: ronderingshändelserna även för `rondering_utfor` (= SQL). |
+| `rollback/T4-D/rollback_t4d.sql` | Genererad av `tests/local/t4d-rollback.js`. |
+| `manual/t3e_standardroller/*` | Version `t4d-2026-11-28`, `ejVerkstallda` utan `rondering_utfor`. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | `20261128000013` som "ny – ej installerad i STAGING" efter T4-C (MIG-1: installerad 37, ny 13). |
+| `tests/staging/c5-read.js` (verktyg för V-stegen) | Förväntan efter T4-D: `vift_ronderingspass` via REST bara för admin/chef/ekonomi. |
+
+**Låsordning:** passåtgärderna tar som förut bara `vift_ronderingspass` FOR UPDATE → `vift_lastChanged`; regeln läses på den låsta raden. `_vift_post_refs` läser passen utan lås (MVCC); `sensitive_fields_read` (T4-C) tar `vift_workOrders` → `vift_ronderingspass` FOR SHARE — ingen väg tar dem i omvänd ordning.
+
+### 3. Klientändringar (VIFT-CRM)
+
+`src/services/AuthService.js` (`?v=27`), `src/pages/RonderingUtforandePage.js` (`?v=15`), `src/data/state.js` (`?v=84`), `src/pages/PageShells.js` (`?v=200`) — se sammanfattningen. Ingång för fältet: länken till passet (`#/rondering/utfor/<pass>`) och kalendern (egna pass); en egen passlista för fältet ingår inte (ingen ombyggnad).
+
+### 4. Fake-backend och paritet (SÄK-17)
+
+`tests/e2e/t4d-regler.js` (båda repona); `fake-backend.js` (båda, synkade). `vift-v2/tests/local/lib/paritet.js`: 24 nya scenarier (R-PATCH/NOTE/START/KLAR-egen, R-PATCH-annans/okand/klar, R-START-klar, R-CREATE/BULK-falt, R-BE, R-AL-annans/klar/okand, R-LAS-pass/ron/BE/logg, R-APP-egen/annans, R-REST-falt/al, C-PASS-D, C-PASS-klar); `rondering-pass-write` ingår i paritetens EF-lista. C-PASS (T4-C) ger nu 200 i både replik och fake (grenen aktiverad).
+
+### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+#### 5.1 Resultat
+
+**Ny testfil `vift-v2/tests/t4d_rondering.test.js` (testgruppen `rondering`): 81/0.** Innehåll:
+- BASLINJE mot T4-C (`3a23521`, `git archive`) på samma data: §6.
+- SEC-ROND-01: läsa (bara egna pass, ronderingen utan pris/intern anteckning/bilder/schema, inga mallar), autoStart, punkt (checkedBy från servern), ångra, anteckning, slutför (completedBy från servern); fältets avvikelse-/AO-referens ignoreras; avslutat pass 409 `pass_completed` (punkt, anteckning, slutför), autoStart no-op.
+- SEC-ROND-02 (6 fall), SEC-ROND-03 (create, bulkCreate, migrateLegacy, mallar och ronderingar via store-key-write), SEC-ROND-04 (begränsad, egen roll utan `rondering_utfor` på EGET pass, tom lista, egen roll utan båda; läsning tom), SEC-ROND-05 (REST-skrivning 42501; REST-läsning 0 rader för fält/begränsad, 3 för arbetsledaren) — exakt status/error/reason och oförändrad KS (pass, ronderingar, mallar, logg, avvikelser, AO, idempotens); grants (bara service_role, perms kan inte förfalskas), gamla signaturer borta.
+- Arbetsledarens flöden: nio åtgärder (även annans och avslutat pass, okänt pass, skapa, massskapa) ger samma status, svar och resultat som T4-C-koden.
+- Ronderingshändelser: rapportera för egen rondering 200, annans 403 `ref_not_visible`, avvikelsehändelse och utan behörighet 403 `type_not_allowed`; läsning bara egna ronderingars händelser.
+- SEC-B5-07 aktiverad: eget aktivt pass 200 + allowed-rad (`pass:…`); annans/avslutat pass, objektnivå, utan `rondering_utfor` → 403 `not_assigned` + denied-rad.
+- **Samtidighet** (egna anslutningar): ×20 två tilldelade kryssar olika punkter samtidigt → båda bevaras; **×20 TOCTOU** (tilldelningen tas bort i en annan transaktion som håller låset → fältets åtgärd väntar och nekas, passet orört); ×20 slutföra och kryssa samtidigt → antingen före (med i summeringen) eller 409 efter, aldrig en ändring efter slutförandet.
+- Verkställande och speglingar (server = standardroller.json = fake; TS = SQL för händelsetyperna).
+- **Ingen breddning:** profiler för 12 användare (T4-C- mot T4-D-koden); enda skillnaderna: (a) ronderingar per pass för roller utan `ao_view_all` (avsmalning, även REST-raden), (b) ronderingshändelser för egna pass (fält med `rondering_utfor`). STAGING:s sju roller: bara avsmalning (a) för de fyra rollerna utan `ao_view_all`.
+- Gammal klient och fönstret: §12. Rollback och STOP: installera → rollback (T4_LAGE=T4-C, 0 oförklarade, data oförändrade, T4-C:s EF fungerar) → installera → STOP; utan T4-C; drift; omvänd ordning hela vägen = STAGING-facit.
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 39/39 testfiler gröna, 2 083 godkända kontroller, 0 fel** (slutkörning efter T4-D; `t4c_atkomstinformation` gav i run-all ett förväntat fel — dess kontroll av `_vift_ej_verkstallda` i T4-C-läget jämförde med registrets nya T4-D-md5 i stället för `md5_t4c`; rättad och omkörd ensam: 87/0). Nya: `t4d_rondering` 81/0. Ändrade och gröna: `t4c_atkomstinformation` 87/0 (pinnad till T4-C), `t3e_standard_roles` 93/0, `t4a_skyddade_falt` 138/0, `replica_build` 43/0, `paritet_fake_kopia` 269/0 (268 scenarier, 266 lika, 2 kända: KEY-01, AUTH-02), `t3d_informationsatkomst` 111/0 (TS = SQL för händelsetyperna), `staging_tools` 40/0, `migrationskedja` (104 identiska, 135 förklarade, 0 oförklarade), `migrationsmappning` 18/0; registret `t4-andringar.js` PASS (87 objekt), `t4d-rollback.js`, `t4c-rollback.js` PASS. Webbläsartesterna i `browser/` hoppades över (SKIP_BROWSER=1) och räknas inte som godkända.
+
+**VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 764 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 269/0, `rollnamn_guard` 17/0.
+
+**E2E:** nya T4D-01–04 (`tests/e2e/specs/45_t4d_rondering.js`) och berörda (RON-01–03, MISC-RON-01, PERM-01/02, T3E-01/06, T4C-01–03, SEC-PERM-01/02) i riktad körning: 17/0/0. **Hela e2e-sviten en gång efter T4-D:** **281 godkända, 0 fel, 0 blockerade, 0 kända fel av 281 (1 774 s)** — täcker T4-C och T4-D. Baslinjen efter T4-B var 274 av 274; skillnaden är T4C-01–03 och T4D-01–04. Rapporten är committad separat (`tests/e2e/report/`, `485ce2d`).
+
+Inga negativa tester har försvagats eller tagits bort.
+
+#### 5.2 Ändrade äldre tester (varje ändring förklarad; inget negativt fall borttaget)
+
+| Test | Ändring | Skäl |
+|---|---|---|
+| `t4c_atkomstinformation` | Prövar T4-C **så som det levererades**: kedjan utan T4-D (`T4_LAGE=T4-C`), EF ur `3a23521`; ej-verkställd-listan jämförs med standardroller.json plus `rondering_utfor`; ominstallationens OBS-rad får bara nämna senare pakets objekt | T4-D ändrar `_vift_ej_verkstallda` och aktiverar ronderingsgrenen (prövas i `t4d_rondering`) |
+| `t4a_skyddade_falt` | `rondering_utfor` med bland senare verkställda | standardroller.json speglar det senaste paketet |
+| `t3e_standard_roles` | SEC-CUST-15 beskriver `rondering_utfor` som verkställd (profilen fortsatt lika — världen har inga pass) | Verkställd; exakt prövning i `t4d_rondering` |
+| `replica_build` | 13 nya migrationer; T4-B 31, T4-C 9, T4-D 17 objekt; grants även för T4-D | Ny migration |
+| `tests/local/t4-andringar.js`, `jamfor-schema.js` | Lager T4-D (`md5_t4c`, `T4_LAGE=T4-C`); borttagna signaturer registreras i det lager som tog bort dem | Samma mönster |
+| `tests/staging/c5-read.js` | REST-läsning av `vift_ronderingspass` väntas bara för admin/chef/ekonomi | R52 (verktyget används i V-stegen efter installation) |
+| VIFT-CRM e2e T3E-01, T3E-06 | Tre ej verkställda behörigheter (tidigare fyra) | `rondering_utfor` verkställd |
+
+### 6. Baslinjefynd, vända
+
+| Baslinje (T4-C-koden, `3a23521`) | Godkänt säkerhetstest (T4-D) |
+|---|---|
+| **SÄK-14 (F19), Ö3:** fältet med `rondering_utfor` kan inte utföra sitt eget pass — `rondering-pass-write` kräver `ao_view_all` för allt, ingen kontroll per pass | SEC-ROND-01/02 (E, P ×20, S, K) |
+| **R52/R53:** fältet läser alla pass (även andras), alla ronderingar med pris och intern anteckning och mallarna (readAllWithHashes); begränsad läser dem direkt via REST | Projektion per pass (E, R, S, K) |
+| **T3-D beslut 5:** ronderingshändelser kräver `ao_view_all` — fältet kan inte rapportera dem för sitt eget pass | Passbaserad behörighet (E, S) |
+
+`baslinje_sakerhet` (historisk källa fb71f26) oförändrad.
+
+### 7. SÄK och D efter T4-D
+
+- **Lokalt åtgärdade:** SÄK-14 (F19); Ö3 (`rondering_utfor`); D-04 rondering-tillägget; D-05 rondering-delen (T4-C:s gren aktiv); R52, R53; T3-D beslut 5; punkt 7 "åtkomst per post för ronderingar" (pass, ronderingar, mallar, händelser); SÄK-17 för T4-D:s vägar.
+- **Öppna/utanför T4-D:** fältets egen avvikelseväg (R53 ger fältet ingen avvikelse eller AO från passet — beslut 1 nedan); en passlista för fältet (rondering-/UX-etappen, ingen ombyggnad nu); SÄK-1 (T4-F).
+
+### 8. VK-1
+
+Ronderingens pris (`pricingType`, `hourRate`, `fixedPrice`, `debiterbar`) projiceras bort för fältet; ingen ändring av prismodell eller fakturering. Ett framtida "tillfälle" per pass (VK-1, punkt 272–274) kan bygga på passets `staffIds`, `completedAt`/`completedBy` och den gemensamma prisupplösningen utan ändring här.
+
+### 9. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | `rondering` 81/0, `sim_parity`, run-all i båda repona, e2e |
+| Negativa tester: rätt felkod och ingen mutation | Ja | `expectReject` med KS i varje negativt fall |
+| Atomiska samtidighetskontroller | Ja | Passregeln under radlåset; ×20 parallellt, ×20 TOCTOU, ×20 slutför/kryssa |
+| Ingen oavsiktligt utökad informationsåtkomst | Ja | 12 användare + 7 STAGING-roller: bara beslutad avsmalning och egna pass |
+| Verksamhetskritiska flöden | Ja | Arbetsledarens nio passåtgärder identiska med T4-C; RON-01–03 |
+| Avgränsade commits | Ja | Server, tester, klient, dokument; e2e-rapport separat |
+| Prövad rollback | Ja | Installera → rollback → installera, STOP, omvänd ordning = STAGING-facit |
+| Faktisk verifieringsnivå i masterplanen | Ja | SÄK-14, Ö3, D-04/D-05, punkt 28, T4-D-raden, V8 |
+| PG17 och Deno | Nej (miljön) | Releasevillkor |
+
+**GO-kriterier T4-D (testplanen §6):** fältet kan bara utföra egna pass — **ja** (SEC-ROND-01/02/04, TOCTOU); arbetsledarens flöden oförändrade — **ja** (identiska svar och resultat mot T4-C-koden, RON-01–03).
+
+### 10. Införandeplan per STAGING-roll (läsande analys)
+
+Ingen STAGING-roll har `rondering_utfor`; `e2e_falt`, `e2e_begransad`, `qa_p2_avgransad` och `v7_sakerhetstest` (utan `ao_view_all`) tappar läsningen av ronderingar, pass och mallar (beslutad avsmalning; de når inte ronderingssidorna i dag). `admin`, `e2e_arbetsledare`, `e2e_ekonomi` oförändrade. Fältets väg börjar gälla när ett konto får `rondering_utfor` (standardrollen `personal`, D-26 steg 4, eller uttryckligt tillägg efter separat GO).
+
+### 11. Installationsplan och rollback (komplement till T4-C §11; beskrivs, körs inte)
+
+**Förutsättningar:** separat GO; T4-A–T4-C installerade. **Backup (tillägg):** EF-backup av `rondering-pass-write` och `store-key-write`; definitionerna av de tio ersatta/borttagna funktionerna (md5 = STOP-värdena); JSON-kopia med sha256 av `vift_ronderingspass`, `vift_ronderingar`, `vift_ronderingsmallar`.
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | md5 = STOP-värdena; antal pass per status och antal pass med tom `staffIds` (de kan bara utföras av `ao_view_all`); ingen pågående rondering under fönstret (driftbesked) |
+| 2. Databas | `20261128000013` i egen transaktion |
+| 3. Edge Functions, direkt efter steg 2 | `rondering-pass-write` och `store-key-write` (med `_shared`) i en bunt |
+| 4. Klient | Klientpaket med `AuthService` `?v=27`, `RonderingUtforandePage` `?v=15`, `state.js` `?v=84`, `PageShells` `?v=200` (och T4-C:s filer) |
+| 5. Storage | Ingen ändring |
+| 6. Efterkontroll (V8) | md5 = `tests/local/t4-andringar.json`; märkt testpass för ett testkonto med `rondering_utfor`: SEC-ROND-01 (punkt + slutför på eget testpass), SEC-ROND-02 (annans testpass 403, pass-KS oförändrad), SEC-ROND-04 (begränsat konto 403); `c5-read.js` (REST-raden bara för ao_view_all) |
+
+**Fönstret mellan steg 2 och 3** (prövat): den gamla EF:en anropar de borttagna signaturerna → 500 `update_failed` utan ändring (fail closed) — även arbetsledarens passåtgärder står still tills EF:en installerats; fönstret ska vara minuter och utan pågående rondering. **Fel ordning** (ny EF före databasen): 500 utan ändring.
+
+**Rollback (ingen data skrivs över):** 1) föregående `rondering-pass-write`, `store-key-write` och föregående klientpaket; 2) `supabase/rollback/T4-D/rollback_t4d.sql`; 3) T4-C:s rollback osv. Pass som fältet utfört (checkedBy/completedBy = fältet) är giltiga för den äldre koden.
+
+### 12. Gammal klient (v3.4, T3, T4-A–C i Service Worker-cache) mot ny server
+
+| Åtgärd | Gammal klient | Följd |
+|---|---|---|
+| Arbetsledarens rondering (ao_view_all) | Samma anrop och svar; REST-läsningen av pass fungerar | Oförändrat |
+| Fältet | Når inte utförandesidan (gamla `PAGE_PERMISSIONS`); readAllWithHashes ger bara egna pass och ronderingen utan pris | Inget läckage; fältets väg kräver omladdning |
+| Fältets gamla `LiveSync` (REST) | 0 rader | Ingen uppdatering förrän omladdning (bara presentation) |
+| Fältets anmärkning med avvikelse (gammal kod) | Avvikelsen nekas av `store-key-write` (ao_view_all), punktens referens ignoreras av RPC:n | Ingen hängande referens |
+
+### 13. Kända begränsningar och beslut som behövs
+
+**Begränsningar:** PG16/Node i stället för PG17/Deno (releasevillkor). Fältet saknar egen passlista (ingång via länk/kalender). Pass utan `staffIds` kan bara utföras av `ao_view_all`. Fönstret mellan databas och EF stoppar passåtgärderna (fail closed).
+
+**Beslut som behövs (förslag i parentes; det restriktiva valet är genomfört):**
+1. Fältet skapar inte avvikelser eller AO från passet; anmärkningen sparas på punkten (rubrik + kommentar) och arbetsledaren skapar avvikelse/AO. (Godta nu; en serverväg för fältets avvikelser per eget pass i rondering-/AO-etappen.)
+2. Fältet ändrar inte ett avslutat pass (409 `pass_completed`); arbetsledaren kan som förut. (Godta.)
+3. Ronderingen projiceras för fältet utan pris, intern anteckning, bilder och schemats personal. (Godta.)
+4. Andra roller utan `ao_view_all` (t.ex. ekonomi utan `ao_view_all`, rapportroller) läser inte ronderingar/pass/mallar. (Godta — sidorna kräver redan `ao_view_all`; standardrollen ekonomi har den.)
+5. Utförande- och rapportsidan öppnas med `rondering_utfor`. (Godta.)
+
+### Ändrade filer
+
+**vift-v2:** nya `supabase/migrations/20261128000013_t4d_rondering.sql`, `supabase/rollback/T4-D/rollback_t4d.sql`, `tests/t4d_rondering.test.js`, `tests/local/t4d-rollback.js`, `tests/e2e/t4d-regler.js`; ändrade `supabase/functions/{rondering-pass-write/index.ts, store-key-write/activity-log.ts}`, `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`, `supabase/manual/t3e_standardroller/*`, `tests/local/{t4-andringar.js, t4-andringar.json, jamfor-schema.js, lib/paritet.js}`, `tests/e2e/fake-backend.js`, `tests/staging/c5-read.js`, `tests/{replica_build, t3e_standard_roles, t4a_skyddade_falt, t4c_atkomstinformation}.test.js`.
+
+**VIFT-CRM:** ändrade `index.html`, `src/services/AuthService.js`, `src/data/state.js`, `src/pages/{RonderingUtforandePage,PageShells}.js`, `tests/e2e/fake-backend.js`, `tests/e2e/specs/40_t3e_standardroller.js`, detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`; nya `tests/e2e/t4d-regler.js`, `tests/e2e/specs/45_t4d_rondering.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `3ea6d58` T4-D server (migration `20261128000013`, `rondering-pass-write`, `activity-log.ts`, rollback, MIGRATIONSORDNING, MIG-1, standardroller)
+- `6aac190` T4-D tester (`t4d_rondering`, registret, `t4d-rollback`, paritet, fake-kopia, `t4d-regler`, `c5-read`, anpassade tester)
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `74291e5` klient (`PAGE_PERMISSIONS`, anmärkning utan avvikelse för fältet, `LiveSync`, rolleditorn, `?v=`)
+- `c861288` tester (fake-backend, `t4d-regler`, e2e T4D-01–04, anpassade specar)
+- `485ce2d` e2e-rapport (281/0/0, hela sviten en gång efter T4-D)
+- dokument: se `git log` efter `485ce2d`
