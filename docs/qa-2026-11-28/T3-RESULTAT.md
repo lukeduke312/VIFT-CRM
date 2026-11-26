@@ -260,7 +260,7 @@ D-, AP-, B- och Ö-beslutens status per id finns i MASTERPLAN.md, med ansvarig e
 I varje fall är det mest restriktiva valet som inte bryter ett flöde genomfört. Förslaget står inom parentes.
 
 **T3-B:**
-1. Tid på en låst AO (klar eller fakturerad) nekas även för arbetsledare och lönehandläggare. Legitim utstämpling är undantagen. (Godta.)
+1. Tid på en låst AO (fakturerad, avbruten, arkiverad, borttagen eller med fakturakoppling, se `_vift_ao_locked`; status `klar` är inte låst i T3-B) nekas även för arbetsledare och lönehandläggare. Legitim utstämpling är undantagen. (Godta.) *Rättat efter granskningen: tidigare stod här felaktigt "klar eller fakturerad". Beslutet efter T3 skärper regeln så att normal tid också låses på `klar` i T4-B (BESLUT-2026-11-28, tillägget efter T3-leveransen).*
 2. Material, checklista och logg tillåts för den tilldelade på en AO som är klar men inte fakturerad. (Godta.)
 3. `aoBilling` `restore` kontrollerar inte att fakturaunderlaget slutat referera AO:n. (Skärp i T4-E.)
 4. Arbetsledare (`ao_edit`) får ta jobb ur poolen. (Godta.)
