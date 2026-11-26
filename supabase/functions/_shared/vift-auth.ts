@@ -95,11 +95,20 @@ export async function checkViftAuth(
     Array.isArray(rolesRow?.value) ? (rolesRow.value as Record<string, unknown>[]) : []
 
   const role = roles.find((r) => r.id === staffMember.role)
-  const perms: string[] = Array.isArray(role?.permissions)
-    ? (role.permissions as string[])
+  /* T4-A (2026-11-28, beslutets punkt 7): en inaktiverad roll (active uttryckligen false/0) ger
+     inga behörigheter — samma regel som _vift_role_perms/vift_caller_perms/_vift_auth_staff. */
+  const perms: string[] = Array.isArray(role?.permissions) && isRoleActive(role)
+    ? (role!.permissions as string[])
     : []
 
   return { ok: true, user, userEmail, staffMember, perms }
+}
+
+/** T4-A: rollen är aktiv om active inte uttryckligen är false/'false'/0/'0' (saknat fält = aktiv). */
+export function isRoleActive(role: Record<string, unknown> | null | undefined): boolean {
+  if (!role) return false
+  const a = role.active
+  return !(a === false || a === 0 || a === 'false' || a === '0')
 }
 
 /** Returnerar true om perms innehåller 'all' eller den angivna behörigheten. */
@@ -237,4 +246,33 @@ export function isPathUnderAo(path: string, aoId: string): boolean {
   if (!path || typeof path !== 'string') return false
   if (path.includes('..') || path.includes('//') || path.startsWith('/')) return false
   return path.startsWith(aoId + '/')
+}
+
+/* ── T4-A (2026-11-28): skyddade AO-fält (B5, B1, D-06, D-01) ─────────────────────
+   Samma regler som _vift_t4a_kan_lasa i supabase/migrations/20261128000009_t4a_skyddade_falt.sql
+   (och fake-backend.js). Används av work-orders-list och av ao-time-write för AO i skrivsvaren,
+   så att en skrivning aldrig lämnar ut mer än en läsning.
+     accessCode m.fl. portkodsfält      objects_sensitive (C-5 gav även ao_edit — SÄK-7: inte längre)
+     materials[].buyPrice              cost_view
+     AO-ekonomi (fixedPrice, amount)   D-06: bara roller som hanterar AO, fakturerar eller har cost_view;
+                                       fältet får debiteringskategorin (priceType, priceGroupId) utan belopp.
+   materials[].sellPrice och prisgruppernas timpris för fältet hör till T4-B (serverpris). */
+export const AO_SENS_FIELDS = ['doorCode', 'keyInformation', 'accessInformation', 'keyReceipt', 'alarmInformation', 'accessCode', 'keyInfo']
+export const AO_ECONOMY_FIELDS = ['fixedPrice', 'amount']
+export const AO_ECONOMY_PERMS = ['ao_edit', 'ao_view_all', 'invoice_view', 'invoice_create', 'cost_view']
+
+export function projectWorkOrder(ao: Record<string, unknown>, perms: string[]): Record<string, unknown> {
+  if (!ao || typeof ao !== 'object' || Array.isArray(ao) || hasPerm(perms, 'all')) return ao
+  const out: Record<string, unknown> = { ...ao }
+  if (!hasPerm(perms, 'objects_sensitive')) for (const f of AO_SENS_FIELDS) delete out[f]
+  if (!AO_ECONOMY_PERMS.some((p) => hasPerm(perms, p))) for (const f of AO_ECONOMY_FIELDS) delete out[f]
+  if (!hasPerm(perms, 'cost_view') && Array.isArray(out.materials)) {
+    out.materials = (out.materials as unknown[]).map((m) => {
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return m
+      const r = { ...(m as Record<string, unknown>) }
+      delete r.buyPrice
+      return r
+    })
+  }
+  return out
 }

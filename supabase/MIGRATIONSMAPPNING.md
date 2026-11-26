@@ -15,7 +15,7 @@ Verifiering: `node tests/local/migrationsmappning.js` (lokal PostgreSQL, ingen k
   9 har samma kod efter normalisering (kommentarer/whitespace). Resten har samma objekt i en annan form.
 - Objekt: kedja A (repo-filer) och kedja B (applicerad SQL) ger samma objekt för **41/41** versioner.
   Slutläget är identiskt utom 5 funktioner som bara skiljer i kommentarer.
-- Repo-filer: installerad 37, ny 8, rekonstruerad 5, kandidat 3, stagingOnly 2, forslag 3.
+- Repo-filer: installerad 37, ny 9, rekonstruerad 5, kandidat 3, stagingOnly 2, forslag 3.
 - **11 versioner har repo-filer med ett annat versionsnummer i filnamnet.**
   En `supabase db push` mot STAGING skulle se dem som nya. Därför ska aldrig `db push` köras mot STAGING utan beslut. Se installationsunderlaget.
 
@@ -143,6 +143,7 @@ Verifiering: `node tests/local/migrationsmappning.js` (lokal PostgreSQL, ingen k
 | `migrations/20261128000006_t3d_urval_per_post.sql` | `f5003e1b` | – | ny – ej installerad i STAGING |
 | `migrations/20261128000007_t3d_aktivitetslogg.sql` | `c3aaac91` | – | ny – ej installerad i STAGING |
 | `migrations/20261128000008_t3e_ej_verkstallda_behorigheter.sql` | `645002ff` | – | ny – ej installerad i STAGING |
+| `migrations/20261128000009_t4a_skyddade_falt.sql` | `e23628de` | – | ny – ej installerad i STAGING |
 | `staging-only/migrations/20261117085418_vift_staging_preinstall_snapshot_20261117.sql` | `6e1281dd` | 20261117085418 | staging-only |
 | `staging-only/migrations/20261125000004_e2e_purge_offer_artifacts.sql` | `f595917e` | 20261124211128 | staging-only |
 | `forslag-ej-applicerade/20261120000001_PROPOSAL_push_subscriptions_index.sql` | `d8d9bda8` | – | förslag – ej applicerat, ingår inte i kedjan |

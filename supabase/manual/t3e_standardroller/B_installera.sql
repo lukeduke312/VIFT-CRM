@@ -1,6 +1,6 @@
 -- =====================================================================
 -- VIFT CRM — T3-E standardroller (M9, D-02): B. Installera de standardroller som saknas (KRÄVER GO)
--- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t3e-2026-11-28). Ändra inte för hand.
+-- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4a-2026-11-28). Ändra inte för hand.
 -- Körs i Supabase SQL Editor för STAGING (yyzljlqyzzcbxmcdbual) FÖRST efter separat GO.
 -- ALDRIG mot LIVE utan en egen LIVE-plan. Ingår INTE i migrationskedjan (inte db push).
 -- Lägger BARA till standardroller som saknas. Skriver aldrig över eller tar bort befintliga roller.
@@ -20,9 +20,9 @@ do $$
 declare
   v_def jsonb := '[
   {"id":"admin","label":"Admin","isBuiltin":true,"active":true,"description":"Superadministratör: alla behörigheter.","permissions":["all"]},
-  {"id":"chef","label":"Arbetsledare","isBuiltin":true,"active":true,"description":"Arbetsledare: arbetsorder, planering, kunder, offerter, fakturaunderlag, intern ekonomi och personalens arbetstid (utan lön och personnummer).","permissions":["dashboard_view","ao_view_all","ao_view_own","ao_pool_take","ao_start_own","ao_complete_own","ao_plan_own","ao_create","ao_edit","ao_complete","ao_time","ao_material","ao_checklist","rondering_utfor","objects_sensitive","customer_manage","offer_manage","sales_manage","recurring_manage","invoice_view","invoice_create","cost_view","cost_edit","time_view_all","staff_view","export_data"]},
-  {"id":"ekonomi","label":"Ekonomi","isBuiltin":true,"active":true,"description":"Ekonomi: fakturaunderlag, rapporter, löneunderlag och attest, intern ekonomi och personnummer för ROT/RUT.","permissions":["dashboard_view","ao_view_all","customer_view","personal_data_view","invoice_view","invoice_create","reports_view","cost_view","cost_edit","payroll_view","payroll_manage","export_data"]},
-  {"id":"personal","label":"Personal","isBuiltin":true,"active":true,"description":"Fältpersonal: egna tilldelade arbetsorder, öppen pool, start och klarmarkering av egna, tid, material och checklista.","permissions":["dashboard_view","ao_view_own","ao_pool_take","ao_start_own","ao_complete_own","ao_plan_own","ao_time","ao_material","ao_checklist","rondering_utfor","objects_access_assigned"]},
+  {"id":"chef","label":"Arbetsledare","isBuiltin":true,"active":true,"description":"Arbetsledare: arbetsorder, planering, kunder, offerter, fakturaunderlag, intern ekonomi, rapporter och personalens arbetstid (utan lön och personnummer).","permissions":["dashboard_view","ao_view_all","ao_view_own","ao_pool_take","ao_start_own","ao_complete_own","ao_plan_own","ao_create","ao_edit","ao_complete","ao_time","ao_material","ao_checklist","rondering_utfor","objects_sensitive","customer_manage","offer_manage","sales_manage","recurring_manage","invoice_view","invoice_create","reports_view","cost_view","cost_edit","time_view_all","staff_view","staff_contacts_view","activity_log_view_all","export_data"]},
+  {"id":"ekonomi","label":"Ekonomi","isBuiltin":true,"active":true,"description":"Ekonomi: fakturaunderlag, rapporter, löneunderlag och attest, intern ekonomi och personnummer för ROT/RUT.","permissions":["dashboard_view","ao_view_all","customer_view","personal_data_view","invoice_view","invoice_create","reports_view","cost_view","cost_edit","payroll_view","payroll_manage","staff_contacts_view","activity_log_view_all","export_data"]},
+  {"id":"personal","label":"Personal","isBuiltin":true,"active":true,"description":"Fältpersonal: egna tilldelade arbetsorder, öppen pool, start och klarmarkering av egna, tid, material och checklista.","permissions":["dashboard_view","ao_view_own","ao_pool_take","ao_start_own","ao_complete_own","ao_plan_own","ao_time","ao_material","ao_checklist","rondering_utfor","objects_access_assigned","staff_contacts_view"]},
   {"id":"begransad","label":"Begränsad","isBuiltin":true,"active":true,"description":"Begränsad/extern: bara egna tilldelade arbetsorder, ingen öppen pool och inga ekonomiska uppgifter. Tid, checklista, start, klarmarkering, rondering och åtkomstinformation kan läggas till separat (D-04).","permissions":["dashboard_view","ao_view_own"]}
 ]'::jsonb;
   v_forv text := current_setting('vift.t3e_forvantad_hash', true);
@@ -116,7 +116,7 @@ begin
   );
   revoke all on table vift_t3e_journal.rollregister from public, anon, authenticated;
   insert into vift_t3e_journal.rollregister(steg, fore_hash, efter_hash, fore_varde, efter_varde, tillagda_roller, identiska_roller, personal_hash, kommentar)
-  values ('installera', v_hash, encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex'), v_roles, v_new, v_tillagda, v_identiska, v_staff_hash, 't3e-2026-11-28')
+  values ('installera', v_hash, encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex'), v_roles, v_new, v_tillagda, v_identiska, v_staff_hash, 't4a-2026-11-28')
   returning id into v_jid;
   raise notice 'T3-E: journalrad % — tillagda roller: %; identiska (orörda): %; ny hash %', v_jid, array_to_string(v_tillagda, ', '), array_to_string(v_identiska, ', '), encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex');
 end $$;

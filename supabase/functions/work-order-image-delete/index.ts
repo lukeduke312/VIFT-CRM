@@ -23,7 +23,15 @@
  * Body: { aoId: string, path: string }
  * Svar 200: { ok: true }
  * Svar 400: { error: 'missing_fields' | 'invalid_path' }
- * Svar 403: { error: 'forbidden' }
+ * Svar 403: { error: 'forbidden' } | { error: 'forbidden', reason: 'not_assigned' | 'not_own' }
+ *
+ * T4-A (2026-11-28, beslutets punkt 7 "ägarkontroll vid bildradering"): utan ao_edit (eller all)
+ * får en bild bara raderas om ingen post på AO:n som tillhör någon annan refererar den: en
+ * loggpost/anteckning med annan staffId, eller en checklistpunkt (avvikelsebild, alltid
+ * arbetsledarens). Den egna postens bild (eller en bild som ingen post längre refererar, t.ex.
+ * efter att den egna loggposten tagits bort eller en uppladdning avbrutits) får raderas.
+ * Annars 403 {error:'forbidden', reason:'not_own'}. Storage-raderingen är inte transaktionell med
+ * store; filvägarna är slumpade per uppladdning, så ingen annan kan referera en ny bild i mellantiden.
  * Svar 404: { error: 'not_found' }
  */
 
@@ -45,6 +53,20 @@ const CORS = {
   'Referrer-Policy':              'no-referrer',
   'X-Content-Type-Options':       'nosniff',
   'X-Frame-Options':              'DENY',
+}
+
+/* T4-A: refereras bilden av en post som inte är anroparens? Loggposter och anteckningar bär
+   staffId (servern sätter det i work_order_log_append); checklistpunkternas avvikelsebilder
+   hanteras bara av arbetsledaren (ao_edit). */
+function imageReferencedByOther(ao: Record<string, unknown>, path: string, me: string): boolean {
+  const refs = (e: Record<string, unknown>) => ['imagePath', 'image', 'avvikelseImage', 'storagePath'].some((k) => e[k] === path)
+    || (Array.isArray(e.images) && (e.images as unknown[]).some((x) => x === path || (!!x && typeof x === 'object' && Object.values(x as Record<string, unknown>).includes(path))))
+  for (const k of ['log', 'notes']) {
+    const list = Array.isArray(ao[k]) ? ao[k] as Record<string, unknown>[] : []
+    if (list.some((e) => e && typeof e === 'object' && refs(e) && String(e.staffId ?? '') !== me)) return true
+  }
+  const cl = Array.isArray(ao.checklist) ? ao.checklist as Record<string, unknown>[] : []
+  return cl.some((e) => e && typeof e === 'object' && refs(e))
 }
 
 function json(data: unknown, status = 200): Response {
@@ -93,6 +115,9 @@ serve(async (req: Request) => {
     return json({ error: 'forbidden', reason: 'not_assigned' }, 403)
   }
   if (!hasPerm(perms, 'ao_view_all') && isLockedWorkOrder(ao)) return json({ error: 'ao_locked' }, 409)
+  if (!hasPerm(perms, 'ao_edit') && imageReferencedByOther(ao, path, callerStaffId)) {
+    return json({ error: 'forbidden', reason: 'not_own' }, 403)
+  }
 
   const { error: delErr } = await supabase.storage.from(BUCKET).remove([path])
   if (delErr) {

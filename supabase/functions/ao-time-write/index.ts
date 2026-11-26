@@ -32,6 +32,13 @@
  * kontrollerar tilldelning under lås och sätter timpriset (SÄK-11, AP-B). Regelfel
  * har formen {error, reason} enligt felkodskatalogen (BEHORIGHETSMATRIS §4).
  *
+ * T4-A (2026-11-28, SÄK-7, B5, B1): AO i svaren (create_ao, patch_ao, take_from_pool, delete_ao,
+ * permanent_delete_ao) projiceras med samma regel som work-orders-list (projectWorkOrder) — en
+ * skrivning lämnar aldrig ut portkod, inköpspris eller AO-ekonomi som en läsning inte ger.
+ * work_order_patch prövar skyddade fält under radlåset (403 forbidden/field_protected; saknat
+ * inköpspris i befintlig materialrad bevaras). create_ao: portkod kräver objects_sensitive (403
+ * field_protected); inköpspris i nya materialrader utan cost_edit ignoreras (ignoredFields).
+ *
  * POST /functions/v1/ao-time-write
  * body: { action: 'create_ao'|'patch_ao'|'take_from_pool'|'delete_ao'
  *               |'create_time'|'patch_time'|'delete_time',
@@ -43,7 +50,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, effectiveAoPerms, aoRuleError } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, effectiveAoPerms, aoRuleError, projectWorkOrder, AO_SENS_FIELDS } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -84,6 +91,13 @@ function stripFields(obj: Record<string, unknown>, fields: string[]): Record<str
   const out = { ...obj }
   fields.forEach(f => { delete out[f] })
   return out
+}
+
+/* T4-A: AO i ett skrivsvar projiceras som en läsning. */
+function projectResult(data: unknown, perms: string[]): Record<string, unknown> {
+  const d = (data && typeof data === 'object' ? { ...(data as Record<string, unknown>) } : {}) as Record<string, unknown>
+  if (d.workOrder && typeof d.workOrder === 'object') d.workOrder = projectWorkOrder(d.workOrder as Record<string, unknown>, perms)
+  return d
 }
 
 serve(async (req: Request) => {
@@ -156,12 +170,27 @@ serve(async (req: Request) => {
          other identity for it. */
       const clientId = typeof (ao as Record<string, unknown>).id === 'string' ? (ao as Record<string, unknown>).id as string : null
       const safeAo = stripFields(ao as Record<string, unknown>, AO_SERVER_OWNED_FIELDS)
+      /* T4-A (B5, SÄK-7): en ny AO får inte bära portkod från en anropare utan objects_sensitive
+         (tomt värde ur klientens schema godtas). Nytt element — ingen samtidighetskritisk kontroll. */
+      if (!hasPerm(perms, 'objects_sensitive') && AO_SENS_FIELDS.some((f) => {
+        const v = (safeAo as Record<string, unknown>)[f]; return v !== undefined && v !== null && v !== ''
+      })) return json({ error: 'forbidden', reason: 'field_protected' }, 403)
+      /* T4-A (D-01): inköpspris i nya materialrader kräver cost_edit; annars ignoreras det (T4-B sätter serverpris). */
+      const ignoredCreate: string[] = []
+      if (!(hasPerm(perms, 'cost_view') && hasPerm(perms, 'cost_edit')) && Array.isArray(safeAo.materials)) {
+        safeAo.materials = (safeAo.materials as unknown[]).map((m) => {
+          if (!m || typeof m !== 'object' || Array.isArray(m)) return m
+          const r = { ...(m as Record<string, unknown>) }
+          if (r.buyPrice !== undefined && r.buyPrice !== null && r.buyPrice !== '') { delete r.buyPrice; if (!ignoredCreate.length) ignoredCreate.push('materials[].buyPrice') }
+          return r
+        })
+      }
       const { data, error } = await supabase.rpc('work_order_create', { p_ao: safeAo, p_idempotency_key: idempotencyKey, p_client_id: clientId })
       if (error) {
         if (String(error.message || '').includes('id_collision')) return json({ error: 'id_collision' }, 409)
         return rpcErrorToResponse(error)
       }
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms), ...(ignoredCreate.length ? { ignoredFields: ignoredCreate } : {}) })
     }
 
     case 'patch_ao': {
@@ -183,7 +212,7 @@ serve(async (req: Request) => {
         p_caller_staff_id: callerStaffId, p_caller_perms: perms
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms) })
     }
 
     /* T3-B (SÄK-4, AP-F): "Ta jobbet" ur öppen pool. Klienten skickar bara aoId och
@@ -204,7 +233,7 @@ serve(async (req: Request) => {
         p_ao_id: aoId, p_caller_staff_id: callerStaffId, p_caller_perms: perms, p_idempotency_key: idempotencyKey, p_entry_id: entryId
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>), ...(ignored.length ? { ignoredFields: ignored } : {}) })
+      return json({ action, ...projectResult(data, perms), ...(ignored.length ? { ignoredFields: ignored } : {}) })
     }
 
     case 'delete_ao': {
@@ -213,7 +242,7 @@ serve(async (req: Request) => {
       if (!aoId) return json({ error: 'missing_fields' }, 400)
       const { data, error } = await supabase.rpc('work_order_soft_delete', { p_ao_id: aoId, p_idempotency_key: idempotencyKey })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms) })
     }
 
     /* permanent_delete_ao — real array removal (WorkOrderService.permanentDelete(),
@@ -232,7 +261,7 @@ serve(async (req: Request) => {
       if (!aoId) return json({ error: 'missing_fields' }, 400)
       const { data, error } = await supabase.rpc('work_order_permanent_delete', { p_ao_id: aoId, p_idempotency_key: idempotencyKey })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms) })
     }
 
     case 'create_time': {

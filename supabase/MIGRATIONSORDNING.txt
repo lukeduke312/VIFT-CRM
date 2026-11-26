@@ -81,3 +81,7 @@ REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.
 # T3-E:s dataändring av vift_roles (standardrollerna) är INTE en migration och körs aldrig av kedjan:
 #   manuellt skript supabase/manual/t3e_standardroller/ (A läsande, B installera, C rollback, D övergång)
 #   med expectedHash, STOP-kontroll och journal, efter separat GO.
+# ── T4-A (2026-11-28): NY – EJ INSTALLERAD I STAGING (klass "ny" i MIG-1). Installeras efter T3-E, i SAMMA
+#    serveromgång som T4-B (T4-A + T4-B samordnat; rollback i omvänd ordning: T4-B först).
+# Installeras i STAGING först efter separat GO, med STOP-kontroll (se docs T4-RESULTAT.md, T4-A).
+20261128000009  migrations/20261128000009_t4a_skyddade_falt.sql

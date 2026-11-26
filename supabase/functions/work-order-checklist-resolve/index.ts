@@ -39,7 +39,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'  // samma låsning som installerad v1 (2026-11-12)
-import { checkViftAuth, hasPerm, aoRuleError } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, aoRuleError, projectWorkOrder } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -169,5 +169,7 @@ serve(async (req: Request) => {
   }
 
   const r = (rpcResult || {}) as Record<string, unknown>
-  return json({ workOrder: r.workOrder, noop: r.noop === true, serverSignature: r.serverSignature, protocol: 2 })
+  /* T4-A (SÄK-7, B5, B1): AO i svaret projiceras som en läsning (projectWorkOrder) — tidigare
+     fick t.ex. fältet portkoden och inköpspriserna här trots att work-orders-list tog bort dem. */
+  return json({ workOrder: r.workOrder ? projectWorkOrder(r.workOrder, perms) : r.workOrder, noop: r.noop === true, serverSignature: r.serverSignature, protocol: 2 })
 })

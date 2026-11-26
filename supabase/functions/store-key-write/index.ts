@@ -49,9 +49,18 @@
  *   type_not_allowed | ref_not_visible), kontrollerade i RPC:n. vift_activities: avslag från
  *   per-post-regeln ger 403 {error:'forbidden', reason:'not_own'|'field_<fält>'|…}.
  *
+ * T4-A (2026-11-28, SÄK-7, B5, D-13, D-17, D-01): C-5 regel 1 ("skrivare får hela värdet") är
+ *   ersatt — även skrivare får den projicerade bilden (vift_store_project). Skrivningarna
+ *   sammanfogas FÄLTVIS i RPC:n under radlåset: ett skyddat fält som anroparen inte får skriva
+ *   bevaras när det saknas (projicerat värde raderar aldrig) och nekas med 403
+ *   {error:'forbidden', reason:'field_protected'} när det skickas. vift_settings kan skrivas fält
+ *   för fält med writeMerge (upserts {id: fältnamn, data, previous}, konfliktsäkert, D-17).
+ *   `klient` ({behorighetskatalog: 4} från T4-klienten) skickas vidare till RPC:n: utan den kan en
+ *   rollskrivning inte ta bort behörigheter som v3.4-rolleditorn inte känner till.
+ *
  * POST /functions/v1/store-key-write
- * body: { action: 'write', key, value, expectedHash } |
- *       { action: 'writeMerge', key, upserts, removals } |
+ * body: { action: 'write', key, value, expectedHash, klient? } |
+ *       { action: 'writeMerge', key, upserts, removals, klient? } |
  *       { action: 'readWithHash', key } |
  *       { action: 'readHashes', keys } |
  *       { action: 'readAllWithHashes', keys }
@@ -137,6 +146,14 @@ const READONLY_EXTRA_KEYS = new Set([
   'vift_notifications', 'vift_ronderingspass', 'vift_projectDocuments',
 ])
 const READABLE_KEYS = new Set([...ALLOWED_KEYS, ...READONLY_EXTRA_KEYS])
+
+/* T4-A: klientens katalogmarkör (bara ett heltal vidarebefordras). */
+function klientMarkor(body: Record<string, unknown>): Record<string, unknown> | null {
+  const k = body && body.klient
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return null
+  const v = (k as Record<string, unknown>).behorighetskatalog
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 1000 ? { behorighetskatalog: v } : null
+}
 
 function mapRpcError(error: { message?: string } | null): Response | null {
   if (!error) return null
@@ -288,6 +305,7 @@ serve(async (req: Request) => {
       p_expected_hash: expectedHash,
       p_caller_authorized: authorized,
       p_actor_id: callerStaffId,
+      p_klient: klientMarkor(body),
     })
     const err = mapRpcError(error)
     if (err) return err
@@ -335,6 +353,7 @@ serve(async (req: Request) => {
       p_removals: removals,
       p_caller_authorized: authorized,
       p_actor_id: callerStaffId,
+      p_klient: klientMarkor(body),
     })
     const err = mapRpcError(error)
     if (err) return err
@@ -354,7 +373,7 @@ serve(async (req: Request) => {
        privilegium — se migration 20261125000003_store_read_by_role.sql.
        Nycklar rollen inte ska se kommer som tomt värde; skyddsvärda fält
        (offerttoken, personnummer, portkoder, bankgiro, internt timpris)
-       tas bort för roller som bara får läsa. Skrivare får alltid hela värdet. */
+       tas bort för roller som bara får läsa. T4-A: även för skrivare (C-5 regel 1 ersatt). */
     const { data, error } = await supabase.rpc('store_read_all_with_hashes_projected', {
       p_business_keys: businessFullKeys,
       p_perms: perms,

@@ -22,6 +22,12 @@
  * den utan fältet). Övriga (t.ex. fältpersonal utan objects_sensitive,
  * ekonomi, begränsad) får AO utan accessCode — även för pool-AO.
  *
+ * T4-A (2026-11-28, SÄK-7, B5, B1, D-06, D-01): C-5:s undantag för ao_edit är borttaget —
+ * portkoden lämnas bara ut med objects_sensitive, även till den som kan redigera AO
+ * (work_order_patch bevarar fältet när patchen saknar det). materials[].buyPrice bara med
+ * cost_view. AO-ekonomi (fixedPrice) inte till fältroller (D-06). Samma projektion
+ * (projectWorkOrder i _shared/vift-auth.ts) används för AO i ao-time-write:s svar.
+ *
  * Källa: installerad STAGING v2 (backup i supabase/backup/ef-installerade-2026-11-25/)
  * + C-5-blocket nedan.
  *
@@ -31,7 +37,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, canViewWorkOrder, isAssigned, isOpenPool, poolProjection } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, canViewWorkOrder, isAssigned, isOpenPool, poolProjection, projectWorkOrder } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -50,16 +56,9 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 }
 
-/* C-5 (2026-11-25) */
-const SENSITIVE_AO_FIELDS = ['accessCode']
+/* C-5 (2026-11-25) → T4-A: skyddade fält tas bort även för skrivare (projectWorkOrder). */
 function redact(list: Record<string, unknown>[], perms: string[]): Record<string, unknown>[] {
-  if (hasPerm(perms, 'objects_sensitive') || hasPerm(perms, 'ao_edit')) return list
-  return list.map((ao) => {
-    if (!ao || typeof ao !== 'object') return ao
-    const out = { ...ao }
-    for (const f of SENSITIVE_AO_FIELDS) delete out[f]
-    return out
-  })
+  return list.map((ao) => (ao && typeof ao === 'object' ? projectWorkOrder(ao, perms) : ao))
 }
 
 serve(async (req: Request) => {
