@@ -131,7 +131,7 @@ const RICH_PRIMARY = {
   admin:   { nytt: 'start', planerad: 'start', 'pågående': 'complete', pausad: 'complete', klar: 'invoice', fakturerad: null, avbruten: 'reactivate', saknas: 'start' },
 };
 const RICH_HANDLED = { nytt: 0, planerad: 0, 'pågående': 11, pausad: 8, klar: 22, fakturerad: 22, avbruten: 4 };
-const RICH_TIME_ROWS = { falt2: 3, chef: 1, ekonomi: 5, admin: 5 }; // time-entries-list: egna, eller alla med payroll_view
+const RICH_TIME_ROWS = { falt2: 3, chef: 5, ekonomi: 5, admin: 5 }; // time-entries-list: egna, eller alla med payroll_view; T4-B (K-01): chef har time_view_all → alla (utan löneuppgifter)
 
 async function richMatrix(t, vp) {
   seedRich(t);

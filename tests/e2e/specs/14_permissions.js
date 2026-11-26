@@ -10,7 +10,7 @@ async function call(s, fn, body) {
   return s.eval(async ([f, b]) => {
     const r = await fetch(SUPABASE_URL + '/functions/v1/' + f, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_AKEY, Authorization: 'Bearer ' + Auth.getAccessToken() }, body: JSON.stringify(b) });
     let d = {}; try { d = await r.json(); } catch (e) {}
-    return { status: r.status, error: d && d.error, reason: d && d.reason, aos: Array.isArray(d.workOrders) ? d.workOrders : null, n: Array.isArray(d.workOrders) ? d.workOrders.length : (Array.isArray(d.timeEntries) ? d.timeEntries.length : null), ids: Array.isArray(d.workOrders) ? d.workOrders.map((a) => a.id) : null, staff: Array.isArray(d.timeEntries) ? [...new Set(d.timeEntries.map((e) => e.staffId))] : null };
+    return { status: r.status, error: d && d.error, reason: d && d.reason, aos: Array.isArray(d.workOrders) ? d.workOrders : null, n: Array.isArray(d.workOrders) ? d.workOrders.length : (Array.isArray(d.timeEntries) ? d.timeEntries.length : null), ids: Array.isArray(d.workOrders) ? d.workOrders.map((a) => a.id) : null, staff: Array.isArray(d.timeEntries) ? [...new Set(d.timeEntries.map((e) => e.staffId))] : null, lon: Array.isArray(d.timeEntries) ? d.timeEntries.filter((e) => ['attested', 'attestedAt', 'attestedBy'].some((f) => f in e)).map((e) => e.staffId) : null };
   }, [fn, body]);
 }
 const key = () => 'perm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -48,7 +48,9 @@ module.exports = [
       const c = await t.world.session();
       await c.login('chef'); // ST-003, saknar payroll_view och objects_sensitive
       const te = await call(c, 'time-entries-list', {});
-      t.assert(te.staff && te.staff.every((x) => x === 'ST-003'), 'arbetsledaren får bara egna tidposter (ingen lönebehörighet): ' + JSON.stringify(te.staff));
+      /* T4-B (K-01, D-08): standardrollen chef har time_view_all — all personals tid, men utan löneuppgifter
+         (attest) i andras poster; payroll_view saknas fortfarande (lönesidan prövas i PERM-04/T4B-06). */
+      t.assert(te.staff && te.staff.some((x) => x !== 'ST-003') && (te.lon || []).every((x) => x === 'ST-003'), 'arbetsledaren (time_view_all) får all personals tid men inga löneuppgifter i andras poster (ingen lönebehörighet): ' + JSON.stringify([te.staff, te.lon]));
       const sens = await call(c, 'get-sensitive-fields', { propertyId: 'OBJ-001' });
       t.assert(sens.status === 403, 'arbetsledaren nekas portkod: ' + JSON.stringify(sens));
       const b = await t.world.session();

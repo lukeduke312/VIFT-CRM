@@ -185,20 +185,34 @@ module.exports = [
     },
   },
   {
-    id: 'MAT-01', module: 'Materialregistrering', name: 'Material läggs till på AO med antal, pris och moms; servern får raden',
+    /* T4-B (D-09, D-10, D-19): fältet anger inget pris (formuläret har inga prisfält) — fritext får okänt
+       pris på servern (aldrig 0); arbetsledaren (invoice_create/cost_edit) anger pris och moms. */
+    id: 'MAT-01', module: 'Materialregistrering', name: 'Material läggs till på AO med antal (fält: okänt pris) och med pris och moms (arbetsledare); servern får raderna',
     async run(t) {
       const s = await t.world.session();
       await s.login('falt2');
       await openAO(s, 'AO-007');
       await s.eval(() => WorkOrderDetailPage.openAddMaterial());
       await s.page.waitForSelector('.modal-overlay.open #mat-name');
+      t.assert(!(await s.page.locator('.modal-overlay.open #mat-sell').count()), 'fältets formulär har inget prisfält');
       await s.page.fill('#mat-name', 'E2E Packning');
       await s.page.fill('#mat-qty', '3');
-      await s.page.fill('#mat-sell', '45.50');
       await s.clickModalButton(/Lägg till/);
       await s.settle(1500);
       const m = (t.fake.get('workOrders').find((a) => a.id === 'AO-007').materials || []).find((x) => x.name === 'E2E Packning');
-      t.assert(m && Number(m.qty) === 3 && Number(m.sellPrice) === 45.5, 'materialraden på servern: ' + JSON.stringify(m));
+      t.assert(m && Number(m.qty) === 3 && m.sellPrice === null && m.sellPriceUnknown === true && m.addedBy === 'ST-004', 'materialraden på servern (okänt pris, inte 0): ' + JSON.stringify(m));
+      const c = await t.world.session();
+      await c.login('chef');
+      await openAO(c, 'AO-007');
+      await c.eval(() => WorkOrderDetailPage.openAddMaterial());
+      await c.page.waitForSelector('.modal-overlay.open #mat-name');
+      await c.page.fill('#mat-name', 'E2E Packning pris');
+      await c.page.fill('#mat-qty', '3');
+      await c.page.fill('#mat-sell', '45.50');
+      await c.clickModalButton(/Lägg till/);
+      await c.settle(1500);
+      const m2 = (t.fake.get('workOrders').find((a) => a.id === 'AO-007').materials || []).find((x) => x.name === 'E2E Packning pris');
+      t.assert(m2 && Number(m2.qty) === 3 && m2.sellPrice === 45.5 && m2.sellPriceUnknown === false, 'arbetsledarens rad med pris på servern: ' + JSON.stringify(m2));
     },
   },
   {
