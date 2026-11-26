@@ -1371,17 +1371,17 @@ const SeedData = {
     {
       id: 'chef', label: 'Arbetsledare', isBuiltin: true, active: true,
       description: 'Arbetsledare: arbetsorder, planering, kunder, offerter, fakturaunderlag, intern ekonomi och personalens arbetstid (utan lön och personnummer).',
-      permissions: ['dashboard_view','ao_view_all','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist','rondering_utfor','objects_sensitive','customer_manage','offer_manage','sales_manage','recurring_manage','invoice_view','invoice_create','cost_view','cost_edit','time_view_all','staff_view','export_data']
+      permissions: ['dashboard_view','ao_view_all','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist','rondering_utfor','objects_sensitive','customer_manage','offer_manage','sales_manage','recurring_manage','invoice_view','invoice_create','reports_view','cost_view','cost_edit','time_view_all','staff_view','staff_contacts_view','activity_log_view_all','export_data']
     },
     {
       id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,
       description: 'Ekonomi: fakturaunderlag, rapporter, löneunderlag och attest, intern ekonomi och personnummer för ROT/RUT.',
-      permissions: ['dashboard_view','ao_view_all','customer_view','personal_data_view','invoice_view','invoice_create','reports_view','cost_view','cost_edit','payroll_view','payroll_manage','export_data']
+      permissions: ['dashboard_view','ao_view_all','customer_view','personal_data_view','invoice_view','invoice_create','reports_view','cost_view','cost_edit','payroll_view','payroll_manage','staff_contacts_view','activity_log_view_all','export_data']
     },
     {
       id: 'personal', label: 'Personal', isBuiltin: true, active: true,
       description: 'Fältpersonal: egna tilldelade arbetsorder, öppen pool, start och klarmarkering av egna, tid, material och checklista.',
-      permissions: ['dashboard_view','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_time','ao_material','ao_checklist','rondering_utfor','objects_access_assigned']
+      permissions: ['dashboard_view','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_time','ao_material','ao_checklist','rondering_utfor','objects_access_assigned','staff_contacts_view']
     },
     {
       id: 'begransad', label: 'Begränsad', isBuiltin: true, active: true,

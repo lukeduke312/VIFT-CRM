@@ -390,8 +390,11 @@ const CustomersPage = {
           <div class="fg"><label>Efternamn <span style="color:var(--rd)">*</span></label>
             <input id="cu-lastname" value="${v('lastName')}" placeholder="Svensson"></div>
         </div>
-        <div class="fg"><label>Personnummer</label>
-          <input id="cu-personnr" value="${v('personnr')}" placeholder="YYYYMMDD-XXXX"></div>
+        ${(typeof Auth === 'undefined' || Auth.can('personal_data_view'))
+          ? `<div class="fg"><label>Personnummer</label>
+          <input id="cu-personnr" value="${v('personnr')}" placeholder="YYYYMMDD-XXXX"></div>`
+          : `<div class="fg"><label>Personnummer</label>
+          <div style="font-size:12px;color:var(--mt);padding:6px 0;">Visas och ändras bara med behörigheten "Se personnummer". Ett sparat personnummer behålls oförändrat.</div></div>`}
         ${legacyIdBannerHtml}
       </div>
 
@@ -652,6 +655,13 @@ const CustomersPage = {
     data.zip     = document.getElementById('cu-zip').value.trim();
     data.city    = document.getElementById('cu-city').value.trim();
     data.note    = document.getElementById('cu-note').value.trim();
+
+    /* T4-A (D-13): utan personal_data_view skickas varken personnummer eller privatpersonens org.nr —
+       servern bevarar de lagrade värdena (fältvis sammanslagning) och nekar en ändring (field_protected). */
+    if (typeof Auth !== 'undefined' && !Auth.can('personal_data_view')) {
+      delete data.personnr;
+      if (type === 'privat') delete data.orgNr;
+    }
 
     if (document.getElementById('cu-diff-invoice')?.checked) {
       data.invoiceAddress = (document.getElementById('cu-inv-address')?.value || '').trim();

@@ -8670,8 +8670,9 @@ const ArticlesPage = {
           </select></div>
       </div>
       <div class="g2">
-        <div class="fg"><label>Inköpspris (kr/enhet)</label>
-          <input type="number" id="art-buy" value="${a?a.buyPrice||0:0}" min="0" placeholder="0"></div>
+        ${Auth.can('cost_view') ? `<div class="fg"><label>Inköpspris (kr/enhet)</label>
+          <input type="number" id="art-buy" value="${a?a.buyPrice||0:0}" min="0" placeholder="0"${Auth.can('cost_edit') ? '' : ' disabled title="Kräver behörigheten Sätta inköpspris"'}></div>` : `<div class="fg"><label>Inköpspris (kr/enhet)</label>
+          <div style="font-size:12px;color:var(--mt);padding:6px 0;">Visas bara med behörigheten "Se intern ekonomi".</div></div>`}
         <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
           <input type="number" id="art-sell" value="${a?a.sellPrice||0:0}" min="0" placeholder="0"></div>
       </div>`;
@@ -8723,6 +8724,9 @@ const ArticlesPage = {
       sellPrice:parseFloat(document.getElementById('art-sell')?.value) || 0,
       updatedAt: new Date().toISOString()
     };
+    /* T4-A (D-01): inköpspris skickas bara med cost_edit — servern bevarar annars det lagrade
+       (fältvis sammanslagning) och nekar en ändring (field_protected). */
+    if (!(Auth.can('cost_view') && Auth.can('cost_edit'))) delete data.buyPrice;
     /* G12: besked först efter serverns bekräftelse. */
     let savedId = artId;
     if (!artId) {
@@ -10286,15 +10290,19 @@ const AdminPage = {
     /* ── Ekonomi ───────────────────────────────────────── */
     sections.ekonomi =
       this._head('Ekonomi', 'Interna parametrar för lönsamhetsberäkningar.') +
+      /* T4-A (D-01): intern timkostnad bara med cost_view (servern lämnar inte ut den annars);
+         ändring kräver cost_edit. Inget påhittat standardvärde visas när värdet inte får läsas. */
       this._card('trending-up', 'Intern timkostnad',
-        `<div class="adm-figure"><b>${esc(fmt(s.internalHourlyCost || 250))} kr/h</b><span>exkl. moms</span></div>
-         <p class="ar-help">Används för att beräkna täckningsbidrag. Visas aldrig för kund i PDF eller e-post.</p>`,
-        { actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openEditEkonomi()">${ic('pencil',14)}<span>Redigera</span></button>` }) +
+        Auth.can('cost_view')
+          ? `<div class="adm-figure"><b>${esc(fmt(s.internalHourlyCost || 250))} kr/h</b><span>exkl. moms</span></div>
+         <p class="ar-help">Används för att beräkna täckningsbidrag. Visas aldrig för kund i PDF eller e-post.</p>`
+          : `<p class="ar-help">Visas bara med behörigheten "Se intern ekonomi".</p>`,
+        Auth.can('cost_view') && Auth.can('cost_edit') ? { actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openEditEkonomi()">${ic('pencil',14)}<span>Redigera</span></button>` } : {}) +
       /* QA-tillägg 2026-11-26: tre olika timvärden blandades ihop (löneunderlaget
          kallade timmar × prisgruppens försäljningspris för "lönekostnad"). */
       this._card('info', 'Tre olika timvärden',
         `<dl class="adm-facts is-stack">
-          <div class="adm-fact"><dt>Intern timkostnad</dt><dd>${esc(fmt(s.internalHourlyCost || 250))} kr/h exkl. moms — inställningen ovan. Används för täckningsbidrag och för "Intern kostnad (uppskattad)" i löneunderlaget.</dd></div>
+          <div class="adm-fact"><dt>Intern timkostnad</dt><dd>${Auth.can('cost_view') ? esc(fmt(s.internalHourlyCost || 250)) + ' kr/h exkl. moms' : 'Dold (kräver behörigheten Se intern ekonomi)'} — inställningen ovan. Används för täckningsbidrag och för "Intern kostnad (uppskattad)" i löneunderlaget.</dd></div>
           <div class="adm-fact"><dt>Försäljningspris</dt><dd>Prisgruppens timpris exkl. moms (t.ex. ${esc(((state.priceGroups || []).filter(p => p.active && p.hourRate > 0).map(p => p.id + ' ' + fmt(p.hourRate) + ' kr/h').slice(0, 4).join(', ')) || '—')}). Kopieras till varje tidpost och ger löneunderlagets "Debiterbart värde".</dd></div>
           <div class="adm-fact"><dt>Lönekostnad</dt><dd>Lön/timlön inklusive sociala avgifter. Finns inte i systemet i dag — personalregistret saknar lönedata.</dd></div>
         </dl>`,
@@ -11376,6 +11384,7 @@ const AdminPage = {
 
   openEditEkonomi() {
     if (!Auth.require('admin_manage')) return;
+    if (!(Auth.can('cost_view') && Auth.can('cost_edit'))) { showToast('Kräver behörigheten att se och ändra intern ekonomi'); return; }
     const s = state.settings || {};
     Modal.open({
       title: `${ic('trending-up',15)} Ekonomi & Lönsamhet`,
@@ -11727,20 +11736,21 @@ const AdminPage = {
     { id:'time_view_all',      label:'Se all personals arbetstid' },
     { id:'bankgiro_edit',      label:'Ändra bankgiro' },
     { id:'export_data',        label:'Exportera register' },
-    { id:'export_personal_data', label:'Exportera personnummer' }
+    { id:'export_personal_data', label:'Exportera personnummer' },
+    /* T4-A (BESLUT-2026-11-28, T3-D 2 och 6, T3-E 4): nya uttryckliga behörigheter. */
+    { id:'staff_contacts_view',   label:'Se kollegors arbetskontakt' },
+    { id:'activity_log_view_all', label:'Se hela aktivitetsloggen' }
   ],
 
   /* T3-E (tillägget i BESLUT-2026-11-28): behörigheter vars serverkontroller ännu inte finns.
      Samma lista som serverns _vift_ej_verkstallda() (vift-v2 20261128000008); testet
      tests/rollnamn_guard.test.js jämför dem. De visas i rolleditorn märkta med paketet och
      ger ingen åtkomst — ingen vy eller knapp i klienten använder dem. */
+  /* T4-A (2026-11-28): cost_view, cost_edit, personal_data_view och bankgiro_edit verkställda
+     (vift-v2 20261128000009); cost_edit:s materialradsdel och prisflödet är T4-B. */
   _PERM_EJ_VERKSTALLD: {
     'ao_plan_own':             'AO-etappen',
-    'cost_view':               'T4-A/T4-B',
-    'cost_edit':               'T4-A/T4-B',
     'time_view_all':           'T4-B',
-    'bankgiro_edit':           'T4-A',
-    'personal_data_view':      'T4-A',
     'objects_access_assigned': 'T4-C',
     'rondering_utfor':         'T4-D',
     'export_data':             'T4-F',
@@ -11787,6 +11797,9 @@ const AdminPage = {
     'bankgiro_edit':           'Ändra bankgiro och betalningsuppgifter',
     'export_data':             'Exportera register som rollen får läsa (snabbexport och Exportcenter)',
     'export_personal_data':    'Exportera personnummer (aktivt val, loggas på servern)',
+    /* T4-A */
+    'staff_contacts_view':     'Se kollegors arbetstelefon och arbets-e-post (interna roller; inte begränsad/extern)',
+    'activity_log_view_all':   'Se hela aktivitetsloggen (annars bara händelser för egna tilldelade arbetsordrar)',
   },
 
   _PERM_GROUPS: [
@@ -11796,7 +11809,7 @@ const AdminPage = {
     { label: 'Kunder & Offerter',  perms: ['customer_manage','customer_view','offer_manage','personal_data_view'] },
     { label: 'Fakturering',        perms: ['invoice_view','invoice_create'] },
     { label: 'Intern ekonomi',     perms: ['cost_view','cost_edit'] },
-    { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage','bankgiro_edit'] },
+    { label: 'Personal & Admin',   perms: ['staff_view','staff_contacts_view','staff_manage','admin_manage','article_manage','bankgiro_edit','activity_log_view_all'] },
     { label: 'Tid & Löner',        perms: ['time_view_all','payroll_view','payroll_manage'] },
     { label: 'Övrigt',             perms: ['recurring_manage','sales_manage','reports_view','export_data','export_personal_data'] },
     { label: 'Säkerhet & Åtkomst', perms: ['objects_sensitive','objects_access_assigned'] }

@@ -580,6 +580,8 @@ function persistRefusalText(error, reason) {
   if (error === 'last_superadmin') return 'Ändringen nekades: det måste alltid finnas minst en aktiv superadministratör (behörigheten "Alla behörigheter"). Ge först någon annan aktiv användare den behörigheten.';
   if (error === 'forbidden' && reason === 'superadmin_required') return 'Ändringen nekades: bara en superadministratör får tilldela, ändra eller ta bort behörigheten "Alla behörigheter" eller roller och personer som har den.';
   if (error === 'forbidden' && reason === 'privilege_escalation') return 'Ändringen nekades: du kan inte ge dig själv eller någon annan behörigheter som du inte själv har, och inte ändra din egen roll.';
+  /* T4-A (B5, D-13, D-17, D-01): skyddat fält (portkod, personnummer, bankgiro, inköpspris, intern timkostnad). */
+  if (error === 'forbidden' && reason === 'field_protected') return 'Ändringen nekades: den rör ett skyddat fält (t.ex. portkod, personnummer, bankgiro eller inköpspris) som du inte har behörighet att ändra. Inget sparades.';
   return null;
 }
 
@@ -1986,6 +1988,56 @@ async function _doPersistDetailed(_owner) {
           _vfLastPersistFailure[_shortKey] = { kind: 'uncertain', error: 'unverified', status: null, ids: Object.assign({}, _sentIds) };
         }
         if (_conflicts.length > 0) _keyResults[_shortKey] = 'conflict';
+        continue;
+      }
+
+      /* T4-A (D-17, SEC-INST-04/05): inställningarna sparas FÄLT FÖR FÄLT (writeMerge med fältnamn
+         som id och senast lästa värde som previous). Servern sammanfogar under radlås: samtidiga
+         ändringar av olika fält tappas aldrig, samma fält ger en konflikt (ingen tyst överskrivning),
+         och skyddade fält som användaren inte får läsa (intern timkostnad utan cost_view) eller ändra
+         (bankgiro utan bankgiro_edit) bevaras. Äldre klienter (v3.4) skriver fortfarande hela värdet;
+         servern bevarar de skyddade fälten även då. */
+      if (_shortKey === 'settings' && _value && typeof _value === 'object' && !Array.isArray(_value)) {
+        let _oldS = {};
+        try { _oldS = JSON.parse(state._keySnapshot[_shortKey] || '{}') || {}; } catch(e) { _oldS = {}; }
+        if (!_oldS || typeof _oldS !== 'object' || Array.isArray(_oldS)) _oldS = {};
+        const _has = function(o, f) { return Object.prototype.hasOwnProperty.call(o, f) && o[f] !== undefined; };
+        const _sUps = [], _sRems = [];
+        Object.keys(_value).forEach(function(f) {
+          if (_value[f] === undefined) return;
+          if (JSON.stringify(_value[f]) !== JSON.stringify(_oldS[f])) _sUps.push({ id: f, data: _value[f], previous: _has(_oldS, f) ? _oldS[f] : null });
+        });
+        Object.keys(_oldS).forEach(function(f) { if (!_has(_value, f) && _has(_oldS, f)) _sRems.push({ id: f, previous: _oldS[f] }); });
+        if (_sUps.length === 0 && _sRems.length === 0) { state._keySnapshot[_shortKey] = _snapshot; continue; }
+        const _sw = await Storage.writeBusinessKeyMerge(_fullKey, _sUps, _sRems);
+        if (!_sw.ok) {
+          console.error('[persist] fältvis skrivning av inställningar avvisad:', _sw.error, _sw.reason || '');
+          ok = false; _failedKeys.push(_shortKey); _keyResults[_shortKey] = 'failed';
+          _vfLastPersistFailure[_shortKey] = {
+            kind: _vfClassifyWriteFailure(_sw), error: _sw.error || null, reason: _sw.reason || null,
+            status: (typeof _sw.status === 'number') ? _sw.status : null, ids: {}
+          };
+          continue;
+        }
+        delete _vfLastPersistFailure[_shortKey];
+        const _sConf = (_sw.data && _sw.data.conflicts) || [];
+        const _sCur = _sw.data && _sw.data.current && typeof _sw.data.current === 'object' && !Array.isArray(_sw.data.current) ? _sw.data.current : null;
+        if (_sCur) {
+          /* Serverns (projicerade) värde blir både tillstånd och baslinje; ett fält i konflikt får
+             den andra sessionens värde och användaren varnas (ändringen kan göras om). */
+          state[_stateKey] = _vfDeepClone(_sCur);
+          state._keySnapshot[_shortKey] = JSON.stringify(_sCur);
+          delete state._keyHash[_shortKey];
+        }
+        if (_sConf.length > 0) {
+          ok = false; _keyResults[_shortKey] = 'conflict';
+          if (typeof App !== 'undefined' && App.showPersistConflictWarning) {
+            try { App.showPersistConflictWarning(_shortKey, _sConf.map(function(c) { return c.id; })); } catch(e2) {}
+          }
+        } else {
+          _keyResults[_shortKey] = _sCur ? 'ok' : 'unverified';
+          if (!_sCur) ok = false;
+        }
         continue;
       }
 

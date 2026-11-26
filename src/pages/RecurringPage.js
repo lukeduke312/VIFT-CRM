@@ -796,6 +796,9 @@ const RecurringPage = {
       status:       roId ? (((state.recurringOrders || []).find(r => r.id === roId) || {}).status || 'aktiv') : 'aktiv'
     };
 
+    /* T4-A (B5, SÄK-7): utan objects_sensitive skickas ingen portkod — servern bevarar den lagrade
+       (fältvis sammanslagning) och nekar en ändring (field_protected). */
+    if (typeof Auth !== 'undefined' && !Auth.can('objects_sensitive')) delete data.accessCode;
     /* G12: besked först efter serverns bekräftelse. */
     const saved = roId ? RecurringOrderService.update(roId, data) : RecurringOrderService.create(data);
     Modal.close();

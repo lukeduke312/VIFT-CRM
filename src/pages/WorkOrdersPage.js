@@ -1495,8 +1495,9 @@ const WorkOrdersPage = {
           <input id="wiz-phone" type="tel" value="${esc(d.phone||cu&&cu.phone||'')}" placeholder="070-xxx xx xx"></div>
       </div>
       <div class="g2">
-        <div class="fg"><label>Åtkomst / portkod</label>
-          <input id="wiz-access" value="${esc(d.accessCode||'')}" placeholder="T.ex. 1234#"></div>
+        ${(typeof Auth === 'undefined' || Auth.can('objects_sensitive')) ? `<div class="fg"><label>Åtkomst / portkod</label>
+          <input id="wiz-access" value="${esc(d.accessCode||'')}" placeholder="T.ex. 1234#"></div>` : `<div class="fg"><label>Åtkomst / portkod</label>
+          <div style="font-size:12px;color:var(--mt);padding:6px 0;">Kräver behörigheten för känsliga fält (portkod).</div></div>`}
         <div class="fg"><label>Intern notering</label>
           <input id="wiz-intnote" value="${esc(d.internalNote||'')}" placeholder="Visas ej för kund"></div>
       </div>`;
@@ -2482,7 +2483,8 @@ const WorkOrdersPage = {
       contactEmail:    d.contactEmail    || '',
       contactId:       d.contactId       || '',
       phone:           d.phone,
-      accessCode:      d.accessCode,
+      /* T4-A (SÄK-7): portkod bara med objects_sensitive (servern nekar annars, field_protected). */
+      accessCode:      (typeof Auth === 'undefined' || Auth.can('objects_sensitive')) ? d.accessCode : '',
       entrance:        d.entrance        || '',
       stairwell:       d.stairwell       || '',
       floor:           d.floor           || '',

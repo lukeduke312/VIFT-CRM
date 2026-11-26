@@ -480,6 +480,12 @@ const Auth = {
       console.warn('[Auth] Personalpostens roll finns inte i rollregistret — ingen behörighet (SÄK-10).');
       return deny('no_role');
     }
+    /* T4-A (2026-11-28): en inaktiverad roll ger inga behörigheter — samma regel som servern
+       (checkViftAuth, _vift_role_perms, vift_caller_perms). */
+    if (role.active === false || role.active === 'false' || role.active === 0 || role.active === '0') {
+      console.warn('[Auth] Personalpostens roll är inaktiverad — ingen behörighet (T4-A).');
+      return deny('no_role');
+    }
 
     state.currentUser = {
       id:        staff.id,

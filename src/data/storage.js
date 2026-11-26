@@ -722,7 +722,9 @@ const Storage = {
   async writeBusinessKey(key, value, expectedHash) {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
-        body: JSON.stringify({ action: 'write', key: key, value: value, expectedHash: expectedHash }),
+        /* T4-A: klientens behörighetskatalog (rolleditorn känner alla behörigheter och bevarar okända),
+           så att servern låter en rollskrivning ta bort behörigheter utanför v3.4-katalogen. */
+        body: JSON.stringify(Object.assign({ action: 'write', key: key, value: value, expectedHash: expectedHash }, key === 'vift_roles' ? { klient: { behorighetskatalog: 4 } } : {})),
         extraHeaders: { 'apikey': SUPABASE_AKEY },
         timeoutMs: this.WRITE_TIMEOUT_MS
       });
@@ -757,7 +759,7 @@ const Storage = {
   async writeBusinessKeyMerge(key, upserts, removals) {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
-        body: JSON.stringify({ action: 'writeMerge', key: key, upserts: upserts, removals: removals || [] }),
+        body: JSON.stringify(Object.assign({ action: 'writeMerge', key: key, upserts: upserts, removals: removals || [] }, key === 'vift_roles' ? { klient: { behorighetskatalog: 4 } } : {})),
         extraHeaders: { 'apikey': SUPABASE_AKEY },
         timeoutMs: this.WRITE_TIMEOUT_MS
       });
